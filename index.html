@@ -1,0 +1,1050 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI 헤어 스타일 변경 서비스</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/fabric.js/5.3.0/fabric.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.1);
+            overflow: hidden;
+        }
+
+        .header {
+            background: linear-gradient(45deg, #667eea, #764ba2);
+            color: white;
+            text-align: center;
+            padding: 40px 20px;
+        }
+
+        .header h1 {
+            font-size: 2.5rem;
+            margin-bottom: 10px;
+            font-weight: 700;
+        }
+
+        .header p {
+            font-size: 1.1rem;
+            opacity: 0.9;
+        }
+
+        .main-content {
+            padding: 40px;
+        }
+
+        .step-container {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 40px;
+            margin-bottom: 40px;
+        }
+
+        .step-box {
+            background: #f8fafc;
+            border-radius: 16px;
+            padding: 30px;
+            border: 2px solid #e2e8f0;
+            transition: all 0.3s ease;
+        }
+
+        .step-box:hover {
+            border-color: #667eea;
+            box-shadow: 0 10px 25px rgba(102, 126, 234, 0.1);
+        }
+
+        .step-title {
+            font-size: 1.4rem;
+            font-weight: 600;
+            color: #2d3748;
+            margin-bottom: 20px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .step-number {
+            background: #667eea;
+            color: white;
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 700;
+            font-size: 0.9rem;
+        }
+
+        .upload-area {
+            border: 3px dashed #cbd5e0;
+            border-radius: 12px;
+            padding: 40px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            margin-bottom: 20px;
+        }
+
+        .upload-area:hover {
+            border-color: #667eea;
+            background-color: #f7fafc;
+        }
+
+        .upload-area.dragover {
+            border-color: #667eea;
+            background-color: #ebf4ff;
+        }
+
+        .upload-icon {
+            font-size: 3rem;
+            color: #a0aec0;
+            margin-bottom: 15px;
+        }
+
+        .upload-text {
+            color: #4a5568;
+            font-size: 1rem;
+            margin-bottom: 10px;
+        }
+
+        .upload-subtext {
+            color: #718096;
+            font-size: 0.9rem;
+        }
+
+        .image-preview {
+            max-width: 100%;
+            border-radius: 12px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+
+        .canvas-container {
+            text-align: center;
+            margin: 20px 0;
+        }
+
+        .canvas-wrapper {
+            display: inline-block;
+            border: 2px solid #e2e8f0;
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        }
+
+        .canvas-controls {
+            background: #f8fafc;
+            padding: 15px;
+            border-top: 1px solid #e2e8f0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 15px;
+            flex-wrap: wrap;
+        }
+
+        .control-group {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .control-label {
+            font-size: 0.9rem;
+            color: #4a5568;
+            font-weight: 500;
+        }
+
+        .brush-size-slider {
+            width: 100px;
+            height: 6px;
+            border-radius: 3px;
+            background: #e2e8f0;
+            outline: none;
+            -webkit-appearance: none;
+        }
+
+        .brush-size-slider::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            width: 18px;
+            height: 18px;
+            border-radius: 50%;
+            background: #667eea;
+            cursor: pointer;
+        }
+
+        .btn {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 0.9rem;
+            font-weight: 500;
+            transition: all 0.2s ease;
+        }
+
+        .btn-secondary {
+            background: #e2e8f0;
+            color: #4a5568;
+        }
+
+        .btn-secondary:hover {
+            background: #cbd5e0;
+        }
+
+        .btn-primary {
+            background: #667eea;
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: #5a67d8;
+        }
+
+        .btn-danger {
+            background: #f56565;
+            color: white;
+        }
+
+        .btn-danger:hover {
+            background: #e53e3e;
+        }
+
+        .mask-status {
+            margin-top: 15px;
+            padding: 10px;
+            border-radius: 8px;
+            font-size: 0.9rem;
+            font-weight: 500;
+        }
+
+        .mask-complete {
+            background: #c6f6d5;
+            color: #22543d;
+            border: 1px solid #9ae6b4;
+        }
+
+        .mask-incomplete {
+            background: #fed7d7;
+            color: #742a2a;
+            border: 1px solid #fc8181;
+        }
+
+        .process-section {
+            text-align: center;
+            margin: 40px 0;
+        }
+
+        .process-btn {
+            background: linear-gradient(45deg, #667eea, #764ba2);
+            color: white;
+            border: none;
+            padding: 18px 40px;
+            border-radius: 50px;
+            font-size: 1.2rem;
+            font-weight: 600;
+            cursor: pointer;
+            box-shadow: 0 8px 25px rgba(102, 126, 234, 0.3);
+            transition: all 0.3s ease;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .process-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 12px 30px rgba(102, 126, 234, 0.4);
+        }
+
+        .process-btn:disabled {
+            background: #a0aec0;
+            cursor: not-allowed;
+            transform: none;
+            box-shadow: none;
+        }
+
+        .loading-spinner {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 2px solid #ffffff;
+            border-radius: 50%;
+            border-top-color: transparent;
+            animation: spin 1s ease-in-out infinite;
+            margin-right: 10px;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .progress-bar {
+            width: 100%;
+            max-width: 400px;
+            height: 8px;
+            background: #e2e8f0;
+            border-radius: 4px;
+            margin: 20px auto;
+            overflow: hidden;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(45deg, #667eea, #764ba2);
+            width: 0%;
+            transition: width 0.3s ease;
+            border-radius: 4px;
+        }
+
+        .progress-text {
+            color: #4a5568;
+            font-size: 0.9rem;
+            margin-top: 10px;
+        }
+
+        .result-section {
+            background: #f8fafc;
+            border-radius: 16px;
+            padding: 40px;
+            text-align: center;
+            margin-top: 40px;
+            display: none;
+        }
+
+        .result-section.show {
+            display: block;
+            animation: fadeIn 0.5s ease;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .result-title {
+            font-size: 1.8rem;
+            font-weight: 600;
+            color: #2d3748;
+            margin-bottom: 30px;
+        }
+
+        .result-image {
+            max-width: 100%;
+            max-height: 600px;
+            border-radius: 16px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+            margin-bottom: 30px;
+        }
+
+        .result-actions {
+            display: flex;
+            gap: 15px;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+
+        .download-btn {
+            background: #48bb78;
+            color: white;
+            padding: 15px 30px;
+            border: none;
+            border-radius: 50px;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            text-decoration: none;
+            display: inline-flex;
+            align-items: center;
+            gap: 10px;
+            box-shadow: 0 4px 15px rgba(72, 187, 120, 0.3);
+            transition: all 0.3s ease;
+        }
+
+        .download-btn:hover {
+            background: #38a169;
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(72, 187, 120, 0.4);
+        }
+
+        .reset-btn {
+            background: #4a5568;
+            color: white;
+            padding: 15px 30px;
+            border: none;
+            border-radius: 50px;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .reset-btn:hover {
+            background: #2d3748;
+        }
+
+        .guide-section {
+            background: linear-gradient(135deg, #667eea22, #764ba222);
+            border-radius: 16px;
+            padding: 30px;
+            margin-top: 40px;
+            border: 1px solid #e2e8f0;
+        }
+
+        .guide-title {
+            font-size: 1.3rem;
+            font-weight: 600;
+            color: #2d3748;
+            margin-bottom: 20px;
+            text-align: center;
+        }
+
+        .guide-steps {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+        }
+
+        .guide-step {
+            background: white;
+            padding: 20px;
+            border-radius: 12px;
+            border-left: 4px solid #667eea;
+        }
+
+        .guide-step h4 {
+            color: #2d3748;
+            font-weight: 600;
+            margin-bottom: 8px;
+        }
+
+        .guide-step p {
+            color: #4a5568;
+            font-size: 0.9rem;
+            line-height: 1.5;
+        }
+
+        .hidden {
+            display: none !important;
+        }
+
+        @media (max-width: 768px) {
+            .step-container {
+                grid-template-columns: 1fr;
+                gap: 30px;
+            }
+            
+            .header h1 {
+                font-size: 2rem;
+            }
+            
+            .main-content {
+                padding: 20px;
+            }
+            
+            .canvas-controls {
+                flex-direction: column;
+                gap: 10px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🎨 AI 헤어 스타일 변경</h1>
+            <p>마스킹으로 정확한 영역을 지정하여 원하는 헤어스타일을 완벽하게 복사하세요</p>
+        </div>
+
+        <div class="main-content">
+            <div class="step-container">
+                <!-- 시드 이미지 섹션 -->
+                <div class="step-box">
+                    <div class="step-title">
+                        <div class="step-number">1</div>
+                        시드 이미지 (A) - 기본 사진
+                    </div>
+                    
+                    <div class="upload-area" id="seedUpload">
+                        <div class="upload-icon">📷</div>
+                        <div class="upload-text">얼굴/배경/옷을 유지할 기본 이미지</div>
+                        <div class="upload-subtext">클릭하거나 파일을 드래그하세요</div>
+                        <input type="file" id="seedFile" accept="image/*" class="hidden">
+                    </div>
+
+                    <div id="seedPreview" class="hidden">
+                        <img id="seedImage" class="image-preview" alt="시드 이미지">
+                        <div class="canvas-container">
+                            <div class="canvas-wrapper">
+                                <canvas id="seedCanvas"></canvas>
+                                <div class="canvas-controls">
+                                    <div class="control-group">
+                                        <span class="control-label">브러시 크기:</span>
+                                        <input type="range" id="seedBrushSize" class="brush-size-slider" 
+                                               min="5" max="50" value="20">
+                                        <span id="seedBrushValue">20px</span>
+                                    </div>
+                                    <button class="btn btn-secondary" onclick="clearSeedMask()">지우기</button>
+                                    <button class="btn btn-primary" onclick="completeSeedMask()">마스크 완료</button>
+                                </div>
+                            </div>
+                        </div>
+                        <div id="seedMaskStatus" class="mask-status mask-incomplete">
+                            🔴 변경하고 싶은 헤어 부분을 빨간색으로 칠해주세요
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 참조 이미지 섹션 -->
+                <div class="step-box">
+                    <div class="step-title">
+                        <div class="step-number">2</div>
+                        참조 이미지 (B) - 헤어스타일
+                    </div>
+                    
+                    <div class="upload-area" id="referenceUpload">
+                        <div class="upload-icon">✨</div>
+                        <div class="upload-text">복사할 헤어스타일이 있는 이미지</div>
+                        <div class="upload-subtext">클릭하거나 파일을 드래그하세요</div>
+                        <input type="file" id="referenceFile" accept="image/*" class="hidden">
+                    </div>
+
+                    <div id="referencePreview" class="hidden">
+                        <img id="referenceImage" class="image-preview" alt="참조 이미지">
+                        <div class="canvas-container">
+                            <div class="canvas-wrapper">
+                                <canvas id="referenceCanvas"></canvas>
+                                <div class="canvas-controls">
+                                    <div class="control-group">
+                                        <span class="control-label">브러시 크기:</span>
+                                        <input type="range" id="referenceBrushSize" class="brush-size-slider" 
+                                               min="5" max="50" value="20">
+                                        <span id="referenceBrushValue">20px</span>
+                                    </div>
+                                    <button class="btn btn-secondary" onclick="clearReferenceMask()">지우기</button>
+                                    <button class="btn btn-primary" onclick="completeReferenceMask()">마스크 완료</button>
+                                </div>
+                            </div>
+                        </div>
+                        <div id="referenceMaskStatus" class="mask-status mask-incomplete">
+                            🟢 복사할 헤어 부분을 초록색으로 칠해주세요
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 처리 버튼 -->
+            <div class="process-section">
+                <button class="process-btn" id="processBtn" onclick="processHairTransfer()" disabled>
+                    <span id="processText">헤어 스타일 변경하기</span>
+                </button>
+                <div class="progress-bar hidden" id="progressBar">
+                    <div class="progress-fill" id="progressFill"></div>
+                </div>
+                <div class="progress-text hidden" id="progressText">준비 중...</div>
+            </div>
+
+            <!-- 결과 섹션 -->
+            <div class="result-section" id="resultSection">
+                <div class="result-title">🎉 변경 완료!</div>
+                <img id="resultImage" class="result-image" alt="결과 이미지">
+                <div class="result-actions">
+                    <a id="downloadLink" class="download-btn" download="hair-transfer-result.png">
+                        📥 다운로드
+                    </a>
+                    <button class="reset-btn" onclick="resetAll()">🔄 다시 시작</button>
+                </div>
+            </div>
+
+            <!-- 사용법 안내 -->
+            <div class="guide-section">
+                <div class="guide-title">📖 사용법</div>
+                <div class="guide-steps">
+                    <div class="guide-step">
+                        <h4>1단계: 시드 이미지</h4>
+                        <p>얼굴, 배경, 옷을 유지할 기본 이미지를 업로드하고 변경하고 싶은 헤어 부분을 빨간색으로 칠하세요.</p>
+                    </div>
+                    <div class="guide-step">
+                        <h4>2단계: 참조 이미지</h4>
+                        <p>원하는 헤어스타일이 있는 이미지를 업로드하고 복사할 헤어 부분을 초록색으로 칠하세요.</p>
+                    </div>
+                    <div class="guide-step">
+                        <h4>3단계: 처리</h4>
+                        <p>두 이미지 모두 마스킹을 완료하면 '헤어 스타일 변경하기' 버튼이 활성화됩니다. (약 30-60초 소요)</p>
+                    </div>
+                    <div class="guide-step">
+                        <h4>4단계: 결과</h4>
+                        <p>A의 얼굴/배경/옷 + B의 헤어스타일이 합쳐진 자연스러운 결과를 확인하고 다운로드하세요!</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // 전역 변수들
+        let seedCanvas, referenceCanvas;
+        let seedMaskComplete = false;
+        let referenceMaskComplete = false;
+
+        // 초기화
+        document.addEventListener('DOMContentLoaded', function() {
+            setupFileUploads();
+            setupBrushControls();
+        });
+
+        // 파일 업로드 설정
+        function setupFileUploads() {
+            // 시드 이미지 업로드
+            const seedUpload = document.getElementById('seedUpload');
+            const seedFile = document.getElementById('seedFile');
+
+            seedUpload.addEventListener('click', () => seedFile.click());
+            seedUpload.addEventListener('dragover', handleDragOver);
+            seedUpload.addEventListener('dragleave', handleDragLeave);
+            seedUpload.addEventListener('drop', (e) => handleSeedDrop(e));
+            seedFile.addEventListener('change', (e) => handleSeedUpload(e));
+
+            // 참조 이미지 업로드
+            const referenceUpload = document.getElementById('referenceUpload');
+            const referenceFile = document.getElementById('referenceFile');
+
+            referenceUpload.addEventListener('click', () => referenceFile.click());
+            referenceUpload.addEventListener('dragover', handleDragOver);
+            referenceUpload.addEventListener('dragleave', handleDragLeave);
+            referenceUpload.addEventListener('drop', (e) => handleReferenceDrop(e));
+            referenceFile.addEventListener('change', (e) => handleReferenceUpload(e));
+        }
+
+        // 드래그 오버 효과
+        function handleDragOver(e) {
+            e.preventDefault();
+            e.currentTarget.classList.add('dragover');
+        }
+
+        function handleDragLeave(e) {
+            e.preventDefault();
+            e.currentTarget.classList.remove('dragover');
+        }
+
+        // 시드 이미지 처리
+        function handleSeedDrop(e) {
+            e.preventDefault();
+            e.currentTarget.classList.remove('dragover');
+            const files = e.dataTransfer.files;
+            if (files.length > 0) {
+                handleSeedFile(files[0]);
+            }
+        }
+
+        function handleSeedUpload(e) {
+            const file = e.target.files[0];
+            if (file) {
+                handleSeedFile(file);
+            }
+        }
+
+        function handleSeedFile(file) {
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                document.getElementById('seedImage').src = e.target.result;
+                document.getElementById('seedPreview').classList.remove('hidden');
+                setupSeedCanvas(e.target.result);
+            };
+            reader.readAsDataURL(file);
+        }
+
+        // 참조 이미지 처리
+        function handleReferenceDrop(e) {
+            e.preventDefault();
+            e.currentTarget.classList.remove('dragover');
+            const files = e.dataTransfer.files;
+            if (files.length > 0) {
+                handleReferenceFile(files[0]);
+            }
+        }
+
+        function handleReferenceUpload(e) {
+            const file = e.target.files[0];
+            if (file) {
+                handleReferenceFile(file);
+            }
+        }
+
+        function handleReferenceFile(file) {
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                document.getElementById('referenceImage').src = e.target.result;
+                document.getElementById('referencePreview').classList.remove('hidden');
+                setupReferenceCanvas(e.target.result);
+            };
+            reader.readAsDataURL(file);
+        }
+
+        // 캔버스 설정
+        function setupSeedCanvas(imageSrc) {
+            const canvasElement = document.getElementById('seedCanvas');
+            seedCanvas = new fabric.Canvas(canvasElement, {
+                width: 512,
+                height: 512,
+                isDrawingMode: true
+            });
+
+            seedCanvas.freeDrawingBrush.width = 20;
+            seedCanvas.freeDrawingBrush.color = '#ff0000'; // 빨간색
+
+            fabric.Image.fromURL(imageSrc, function(img) {
+                img.scaleToWidth(512);
+                img.scaleToHeight(512);
+                img.selectable = false;
+                seedCanvas.setBackgroundImage(img, seedCanvas.renderAll.bind(seedCanvas));
+            });
+        }
+
+        function setupReferenceCanvas(imageSrc) {
+            const canvasElement = document.getElementById('referenceCanvas');
+            referenceCanvas = new fabric.Canvas(canvasElement, {
+                width: 512,
+                height: 512,
+                isDrawingMode: true
+            });
+
+            referenceCanvas.freeDrawingBrush.width = 20;
+            referenceCanvas.freeDrawingBrush.color = '#00ff00'; // 초록색
+
+            fabric.Image.fromURL(imageSrc, function(img) {
+                img.scaleToWidth(512);
+                img.scaleToHeight(512);
+                img.selectable = false;
+                referenceCanvas.setBackgroundImage(img, referenceCanvas.renderAll.bind(referenceCanvas));
+            });
+        }
+
+        // 브러시 컨트롤 설정
+        function setupBrushControls() {
+            const seedBrushSize = document.getElementById('seedBrushSize');
+            const seedBrushValue = document.getElementById('seedBrushValue');
+            const referenceBrushSize = document.getElementById('referenceBrushSize');
+            const referenceBrushValue = document.getElementById('referenceBrushValue');
+
+            seedBrushSize.addEventListener('input', function() {
+                const size = this.value;
+                seedBrushValue.textContent = size + 'px';
+                if (seedCanvas) {
+                    seedCanvas.freeDrawingBrush.width = parseInt(size);
+                }
+            });
+
+            referenceBrushSize.addEventListener('input', function() {
+                const size = this.value;
+                referenceBrushValue.textContent = size + 'px';
+                if (referenceCanvas) {
+                    referenceCanvas.freeDrawingBrush.width = parseInt(size);
+                }
+            });
+        }
+
+        // 마스크 지우기
+        function clearSeedMask() {
+            if (seedCanvas) {
+                seedCanvas.getObjects().forEach(obj => {
+                    if (obj.type === 'path') {
+                        seedCanvas.remove(obj);
+                    }
+                });
+                seedCanvas.renderAll();
+                seedMaskComplete = false;
+                updateSeedMaskStatus();
+                updateProcessButton();
+            }
+        }
+
+        function clearReferenceMask() {
+            if (referenceCanvas) {
+                referenceCanvas.getObjects().forEach(obj => {
+                    if (obj.type === 'path') {
+                        referenceCanvas.remove(obj);
+                    }
+                });
+                referenceCanvas.renderAll();
+                referenceMaskComplete = false;
+                updateReferenceMaskStatus();
+                updateProcessButton();
+            }
+        }
+
+        // 마스크 완료
+        function completeSeedMask() {
+            if (seedCanvas && seedCanvas.getObjects().length > 0) {
+                seedMaskComplete = true;
+                updateSeedMaskStatus();
+                updateProcessButton();
+            } else {
+                alert('먼저 헤어 영역을 칠해주세요!');
+            }
+        }
+
+        function completeReferenceMask() {
+            if (referenceCanvas && referenceCanvas.getObjects().length > 0) {
+                referenceMaskComplete = true;
+                updateReferenceMaskStatus();
+                updateProcessButton();
+            } else {
+                alert('먼저 헤어 영역을 칠해주세요!');
+            }
+        }
+
+        // 마스크 상태 업데이트
+        function updateSeedMaskStatus() {
+            const status = document.getElementById('seedMaskStatus');
+            if (seedMaskComplete) {
+                status.className = 'mask-status mask-complete';
+                status.textContent = '✅ 시드 이미지 마스킹 완료!';
+            } else {
+                status.className = 'mask-status mask-incomplete';
+                status.textContent = '🔴 변경하고 싶은 헤어 부분을 빨간색으로 칠해주세요';
+            }
+        }
+
+        function updateReferenceMaskStatus() {
+            const status = document.getElementById('referenceMaskStatus');
+            if (referenceMaskComplete) {
+                status.className = 'mask-status mask-complete';
+                status.textContent = '✅ 참조 이미지 마스킹 완료!';
+            } else {
+                status.className = 'mask-status mask-incomplete';
+                status.textContent = '🟢 복사할 헤어 부분을 초록색으로 칠해주세요';
+            }
+        }
+
+        // 처리 버튼 상태 업데이트
+        function updateProcessButton() {
+            const processBtn = document.getElementById('processBtn');
+            if (seedMaskComplete && referenceMaskComplete) {
+                processBtn.disabled = false;
+                processBtn.style.background = 'linear-gradient(45deg, #667eea, #764ba2)';
+            } else {
+                processBtn.disabled = true;
+                processBtn.style.background = '#a0aec0';
+            }
+        }
+
+        // 헤어 전송 처리
+        async function processHairTransfer() {
+            if (!seedMaskComplete || !referenceMaskComplete) {
+                alert('두 이미지 모두 마스킹을 완료해주세요!');
+                return;
+            }
+
+            // UI 업데이트
+            const processBtn = document.getElementById('processBtn');
+            const processText = document.getElementById('processText');
+            const progressBar = document.getElementById('progressBar');
+            const progressFill = document.getElementById('progressFill');
+            const progressText = document.getElementById('progressText');
+
+            processBtn.disabled = true;
+            processText.innerHTML = '<span class="loading-spinner"></span>처리 중...';
+            progressBar.classList.remove('hidden');
+            progressText.classList.remove('hidden');
+
+            try {
+                // 1. 이미지와 마스크 데이터 추출
+                progressText.textContent = '이미지 데이터 준비 중...';
+                progressFill.style.width = '10%';
+
+                const seedImageData = document.getElementById('seedImage').src;
+                const referenceImageData = document.getElementById('referenceImage').src;
+                const seedMaskData = extractMaskFromCanvas(seedCanvas);
+                const referenceMaskData = extractMaskFromCanvas(referenceCanvas);
+
+                // 2. 서버에 요청 전송
+                progressText.textContent = '서버에 업로드 중...';
+                progressFill.style.width = '25%';
+
+                const formData = new FormData();
+                formData.append('seed_image', dataURItoBlob(seedImageData));
+                formData.append('seed_mask', dataURItoBlob(seedMaskData));
+                formData.append('reference_image', dataURItoBlob(referenceImageData));
+                formData.append('reference_mask', dataURItoBlob(referenceMaskData));
+
+                const response = await fetch('/api/transfer-hair', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                if (!response.ok) {
+                    throw new Error('서버 요청 실패');
+                }
+
+                const result = await response.json();
+                const jobId = result.job_id;
+
+                // 3. 작업 상태 폴링
+                progressText.textContent = 'AI가 이미지를 처리 중...';
+                progressFill.style.width = '50%';
+
+                await pollJobStatus(jobId, progressFill, progressText);
+
+            } catch (error) {
+                console.error('Error:', error);
+                alert('처리 중 오류가 발생했습니다: ' + error.message);
+            } finally {
+                // UI 리셋
+                processBtn.disabled = false;
+                processText.textContent = '헤어 스타일 변경하기';
+                progressBar.classList.add('hidden');
+                progressText.classList.add('hidden');
+            }
+        }
+
+        // 캔버스에서 마스크 추출
+        function extractMaskFromCanvas(canvas) {
+            // 배경 제거하고 마스크만 추출
+            const tempCanvas = document.createElement('canvas');
+            tempCanvas.width = 512;
+            tempCanvas.height = 512;
+            const tempFabricCanvas = new fabric.Canvas(tempCanvas);
+
+            // 패스 객체만 복사
+            const paths = canvas.getObjects().filter(obj => obj.type === 'path');
+            paths.forEach(path => {
+                tempFabricCanvas.add(path.clone());
+            });
+
+            const maskDataURL = tempFabricCanvas.toDataURL('image/png');
+            tempFabricCanvas.dispose();
+            
+            return maskDataURL;
+        }
+
+        // 작업 상태 폴링
+        async function pollJobStatus(jobId, progressFill, progressText) {
+            const maxAttempts = 60; // 2분 최대 대기
+            let attempts = 0;
+
+            return new Promise((resolve, reject) => {
+                const pollInterval = setInterval(async () => {
+                    attempts++;
+                    
+                    try {
+                        const response = await fetch(`/api/job-status/${jobId}`);
+                        const data = await response.json();
+
+                        // 진행률 업데이트
+                        const progress = Math.min(50 + (attempts * 2), 95);
+                        progressFill.style.width = progress + '%';
+
+                        if (data.status === 'COMPLETED') {
+                            progressFill.style.width = '100%';
+                            progressText.textContent = '완료!';
+                            
+                            // 결과 표시
+                            showResult(data.result_url);
+                            clearInterval(pollInterval);
+                            resolve();
+                            
+                        } else if (data.status === 'FAILED') {
+                            clearInterval(pollInterval);
+                            reject(new Error(data.error || '처리 실패'));
+                            
+                        } else {
+                            progressText.textContent = data.progress || 'AI 모델이 처리 중...';
+                        }
+
+                        // 타임아웃 체크
+                        if (attempts >= maxAttempts) {
+                            clearInterval(pollInterval);
+                            reject(new Error('처리 시간 초과'));
+                        }
+                        
+                    } catch (error) {
+                        clearInterval(pollInterval);
+                        reject(error);
+                    }
+                }, 2000);
+            });
+        }
+
+        // 결과 표시
+        function showResult(resultUrl) {
+            const resultSection = document.getElementById('resultSection');
+            const resultImage = document.getElementById('resultImage');
+            const downloadLink = document.getElementById('downloadLink');
+
+            resultImage.src = resultUrl;
+            downloadLink.href = resultUrl;
+            resultSection.classList.add('show');
+
+            // 결과 섹션으로 스크롤
+            resultSection.scrollIntoView({ behavior: 'smooth' });
+        }
+
+        // 데이터 URI를 Blob으로 변환
+        function dataURItoBlob(dataURI) {
+            const byteString = atob(dataURI.split(',')[1]);
+            const mimeString = dataURI.split(',')[0].split(':')[1].split(';')[0];
+            const ab = new ArrayBuffer(byteString.length);
+            const ia = new Uint8Array(ab);
+            
+            for (let i = 0; i < byteString.length; i++) {
+                ia[i] = byteString.charCodeAt(i);
+            }
+            
+            return new Blob([ab], { type: mimeString });
+        }
+
+        // 전체 리셋
+        function resetAll() {
+            // 이미지 초기화
+            document.getElementById('seedPreview').classList.add('hidden');
+            document.getElementById('referencePreview').classList.add('hidden');
+            document.getElementById('resultSection').classList.remove('show');
+            
+            // 파일 입력 초기화
+            document.getElementById('seedFile').value = '';
+            document.getElementById('referenceFile').value = '';
+            
+            // 캔버스 정리
+            if (seedCanvas) {
+                seedCanvas.dispose();
+                seedCanvas = null;
+            }
+            if (referenceCanvas) {
+                referenceCanvas.dispose();
+                referenceCanvas = null;
+            }
+            
+            // 상태 초기화
+            seedMaskComplete = false;
+            referenceMaskComplete = false;
+            updateProcessButton();
+            
+            // 상단으로 스크롤
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+
+        // 브라우저 새로고침시 정리
+        window.addEventListener('beforeunload', function() {
+            if (seedCanvas) seedCanvas.dispose();
+            if (referenceCanvas) referenceCanvas.dispose();
+        });
+    </script>
+</body>
+</html>
