@@ -845,6 +845,11 @@
             }
         }
 
+        // API 기본 URL 설정 (환경에 따라 자동 감지)
+        const API_BASE_URL = window.location.hostname === 'localhost' 
+            ? 'http://localhost:8000' 
+            : 'https://your-backend-api.railway.app';  // 실제 백엔드 URL로 변경
+
         // 헤어 전송 처리
         async function processHairTransfer() {
             if (!seedMaskComplete || !referenceMaskComplete) {
@@ -884,7 +889,7 @@
                 formData.append('reference_image', dataURItoBlob(referenceImageData));
                 formData.append('reference_mask', dataURItoBlob(referenceMaskData));
 
-                const response = await fetch('/api/transfer-hair', {
+                const response = await fetch(`${API_BASE_URL}/api/transfer-hair`, {
                     method: 'POST',
                     body: formData
                 });
@@ -944,7 +949,7 @@
                     attempts++;
                     
                     try {
-                        const response = await fetch(`/api/job-status/${jobId}`);
+                        const response = await fetch(`${API_BASE_URL}/api/job-status/${jobId}`);
                         const data = await response.json();
 
                         // 진행률 업데이트
