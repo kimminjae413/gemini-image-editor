@@ -256,6 +256,9 @@ def poll_vmodel_task(task_id, max_attempts=60):
             if response.status_code == 200:
                 result = response.json()
                 
+                # 디버깅: 응답 구조 확인
+                st.write(f"DEBUG - API 응답: {result}")
+                
                 # 응답 구조 확인
                 if result.get('code') == 200 and 'result' in result:
                     task_result = result['result']
