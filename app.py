@@ -78,13 +78,72 @@ def validate_image(image):
     except Exception as e:
         return False, f"이미지 검증 실패: {e}"
 
-def upload_image_to_temp_url(image):
-    """임시 이미지 URL 생성 (실제로는 외부 이미지 호스팅 서비스 필요)"""
-    # 임시 방편: 이미지를 base64로 변환하되 data URL로 처리
-    buffer = io.BytesIO()
-    image.save(buffer, format='PNG')
-    b64_string = base64.b64encode(buffer.getvalue()).decode()
-    return f"data:image/png;base64,{b64_string}"
+def upload_image_to_imgur(image):
+    """Imgur에 이미지 업로드하고 URL 반환"""
+    try:
+        # 이미지를 base64로 변환
+        buffer = io.BytesIO()
+        image.save(buffer, format='PNG')
+        img_b64 = base64.b64encode(buffer.getvalue()).decode()
+        
+        # Imgur API 호출
+        headers = {
+            'Authorization': 'Client-ID 546c25a59c58ad7',  # 공개 클라이언트 ID
+            'Content-Type': 'application/json',
+        }
+        
+        data = {
+            'image': img_b64,
+            'type': 'base64',
+            'title': 'temp_upload'
+        }
+        
+        response = requests.post(
+            'https://api.imgur.com/3/image',
+            headers=headers,
+            json=data,
+            timeout=30
+        )
+        
+        if response.status_code == 200:
+            result = response.json()
+            if result.get('success'):
+                return result['data']['link']
+        
+        # Imgur 실패시 fallback으로 임시 서비스 사용
+        st.warning("이미지 업로드 서비스에 일시적 문제가 있습니다. 다른 방법을 시도합니다...")
+        return upload_to_tempfile_io(image)
+        
+    except Exception as e:
+        st.warning(f"이미지 업로드 중 오류: {e}. 다른 방법을 시도합니다...")
+        return upload_to_tempfile_io(image)
+
+def upload_to_tempfile_io(image):
+    """대안 임시 파일 호스팅 서비스"""
+    try:
+        buffer = io.BytesIO()
+        image.save(buffer, format='PNG')
+        buffer.seek(0)
+        
+        files = {'file': ('image.png', buffer, 'image/png')}
+        
+        response = requests.post(
+            'https://tmpfiles.org/api/v1/upload',
+            files=files,
+            timeout=30
+        )
+        
+        if response.status_code == 200:
+            result = response.json()
+            if 'data' in result and 'url' in result['data']:
+                # tmpfiles.org URL을 직접 액세스 가능한 형태로 변환
+                temp_url = result['data']['url']
+                direct_url = temp_url.replace('https://tmpfiles.org/', 'https://tmpfiles.org/dl/')
+                return direct_url
+                
+    except Exception as e:
+        st.error(f"모든 이미지 업로드 서비스가 실패했습니다: {e}")
+        return None
 
 def process_with_vmodel_api(seed_image, ref_image):
     """VModel API로 헤어 변경 처리"""
@@ -94,9 +153,16 @@ def process_with_vmodel_api(seed_image, ref_image):
         return None
     
     try:
-        # 이미지를 임시 URL로 변환 (실제로는 외부 호스팅 필요)
-        target_url = upload_image_to_temp_url(seed_image)
-        swap_url = upload_image_to_temp_url(ref_image)
+        # 이미지를 실제 URL로 업로드
+        st.info("이미지를 업로드하고 있습니다...")
+        target_url = upload_image_to_imgur(seed_image)
+        swap_url = upload_image_to_imgur(ref_image)
+        
+        if not target_url or not swap_url:
+            st.error("이미지 업로드에 실패했습니다. 잠시 후 다시 시도해주세요.")
+            return None
+        
+        st.success("이미지 업로드 완료!")
         
         # VModel API 페이로드 (문서 형식에 맞춤)
         payload = {
@@ -142,7 +208,7 @@ def process_with_vmodel_api(seed_image, ref_image):
         st.error(f"처리 중 오류 발생: {e}")
         return None
 
-def poll_vmodel_task(task_id, max_attempts=30):
+def poll_vmodel_result(task_id, max_attempts=30):
     """VModel 결과 폴링"""
     headers = {"Authorization": f"Bearer {VMODEL_API_KEY}"}
     
