@@ -238,8 +238,8 @@ def process_with_vmodel_api(seed_image, ref_image):
         st.error(f"처리 중 오류 발생: {e}")
         return None
 
-def poll_vmodel_task(task_id, max_attempts=30):
-    """VModel 결과 폴링"""
+def poll_vmodel_task(task_id, max_attempts=60):
+    """VModel Task 상태 폴링 - 60초로 연장"""
     headers = {"Authorization": f"Bearer {VMODEL_API_KEY}"}
     
     progress_bar = st.progress(0)
@@ -248,42 +248,63 @@ def poll_vmodel_task(task_id, max_attempts=30):
     for attempt in range(max_attempts):
         try:
             response = requests.get(
-                f"https://api.vmodel.ai/api/tasks/v1/{task_id}", 
+                f"https://api.vmodel.ai/api/tasks/v1/get/{task_id}", 
                 headers=headers,
                 timeout=10
             )
             
             if response.status_code == 200:
                 result = response.json()
-                status = result.get('status', 'processing')
                 
-                # 진행률 업데이트
-                progress = min(95, (attempt + 1) * 3)
-                progress_bar.progress(progress)
-                status_text.text(f"AI 처리 중... ({progress}%)")
-                
-                if status == 'succeeded':
-                    progress_bar.progress(100)
-                    status_text.text("완료!")
+                # 응답 구조 확인
+                if result.get('code') == 200 and 'result' in result:
+                    task_result = result['result']
+                    status = task_result.get('status', 'processing')
                     
-                    result_url = result.get('output', {}).get('image')
-                    if result_url:
-                        img_response = requests.get(result_url)
-                        return Image.open(io.BytesIO(img_response.content))
+                    # 진행률 업데이트 (60초 기준)
+                    progress = min(95, (attempt + 1) * 1.5)
+                    progress_bar.progress(progress)
+                    
+                    if status == 'processing':
+                        status_text.text(f"AI 처리 중... ({progress:.0f}%) - {attempt+1}/60회 시도")
+                    elif status == 'starting':
+                        status_text.text("AI 모델 시작 중...")
+                    elif status == 'succeeded':
+                        progress_bar.progress(100)
+                        status_text.text("완료!")
+                        
+                        # 결과 이미지 URL 가져오기
+                        output = task_result.get('output', [])
+                        if output and len(output) > 0:
+                            result_url = output[0]
+                            img_response = requests.get(result_url, headers=headers, timeout=30)
+                            if img_response.status_code == 200:
+                                return Image.open(io.BytesIO(img_response.content))
+                        
+                        st.error("결과 이미지를 찾을 수 없습니다.")
+                        return None
+                        
+                    elif status == 'failed':
+                        error_msg = task_result.get('error', '알 수 없는 오류')
+                        st.error(f"처리 실패: {error_msg}")
+                        return None
+                    
+                    elif status == 'canceled':
+                        st.error("작업이 취소되었습니다.")
+                        return None
                 
-                elif status == 'failed':
-                    st.error("처리 실패")
-                    return None
+                time.sleep(1)  # 1초마다 체크
+            else:
+                st.error(f"Task 상태 확인 실패: HTTP {response.status_code}")
+                return None
                 
-                time.sleep(2)
-            
         except Exception as e:
             if attempt == max_attempts - 1:
-                st.error(f"처리 시간 초과: {e}")
+                st.error(f"처리 시간 초과 (60초): {e}")
                 return None
-            time.sleep(2)
+            time.sleep(1)
     
-    st.error("처리 시간 초과")
+    st.error("처리 시간 초과 - VModel 서버가 응답하지 않습니다")
     return None
 
 # 메인 UI
