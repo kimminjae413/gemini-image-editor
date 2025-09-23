@@ -78,6 +78,14 @@ def validate_image(image):
     except Exception as e:
         return False, f"이미지 검증 실패: {e}"
 
+def upload_image_to_temp_url(image):
+    """임시 이미지 URL 생성 (실제로는 외부 이미지 호스팅 서비스 필요)"""
+    # 임시 방편: 이미지를 base64로 변환하되 data URL로 처리
+    buffer = io.BytesIO()
+    image.save(buffer, format='PNG')
+    b64_string = base64.b64encode(buffer.getvalue()).decode()
+    return f"data:image/png;base64,{b64_string}"
+
 def process_with_vmodel_api(seed_image, ref_image):
     """VModel API로 헤어 변경 처리"""
     
@@ -86,23 +94,16 @@ def process_with_vmodel_api(seed_image, ref_image):
         return None
     
     try:
-        # 이미지를 Base64로 인코딩
-        seed_buffer = io.BytesIO()
-        seed_image.save(seed_buffer, format='PNG')
-        seed_b64 = base64.b64encode(seed_buffer.getvalue()).decode()
+        # 이미지를 임시 URL로 변환 (실제로는 외부 호스팅 필요)
+        target_url = upload_image_to_temp_url(seed_image)
+        swap_url = upload_image_to_temp_url(ref_image)
         
-        ref_buffer = io.BytesIO()
-        ref_image.save(ref_buffer, format='PNG')
-        ref_b64 = base64.b64encode(ref_buffer.getvalue()).decode()
-        
-        # VModel API 호출
+        # VModel API 페이로드 (문서 형식에 맞춤)
         payload = {
             "version": "d4f292d1ea72ac4e501e6ac7be938ce2a5c50c6852387b1b64dedee01e623029",
             "input": {
-                "target_image": f"data:image/png;base64,{seed_b64}",
-                "reference_image": f"data:image/png;base64,{ref_b64}",
-                "guidance_scale": 7.5,
-                "num_inference_steps": 20
+                "target_image": target_url,
+                "swap_image": swap_url
             }
         }
         
@@ -111,30 +112,30 @@ def process_with_vmodel_api(seed_image, ref_image):
             "Content-Type": "application/json"
         }
         
-        # API 호출
+        # Task 생성 API 호출
         response = requests.post(
             "https://api.vmodel.ai/api/tasks/v1/create", 
             json=payload, 
             headers=headers, 
-            timeout=60
+            timeout=30
         )
         
         if response.status_code == 200:
             result = response.json()
             
-            # 결과 URL 확인
-            if 'output' in result and 'image' in result['output']:
-                result_url = result['output']['image']
-                img_response = requests.get(result_url, timeout=30)
-                
-                if img_response.status_code == 200:
-                    return Image.open(io.BytesIO(img_response.content))
+            # 응답 구조 확인
+            if result.get('code') == 200 and 'result' in result:
+                task_id = result['result'].get('task_id')
+                if task_id:
+                    return poll_vmodel_task(task_id)
             
-            # 비동기 처리인 경우 폴링
-            if 'id' in result:
-                return poll_vmodel_result(result['id'])
+        # 에러 응답 표시
+        try:
+            error_data = response.json()
+            st.error(f"API 오류: {error_data}")
+        except:
+            st.error(f"API 호출 실패: HTTP {response.status_code}")
         
-        st.error(f"API 호출 실패: {response.status_code}")
         return None
         
     except Exception as e:
