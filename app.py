@@ -65,18 +65,46 @@ if 'processing_history' not in st.session_state:
 # VModel API 설정 (비밀키는 Streamlit Secrets에서 관리)
 VMODEL_API_KEY = st.secrets.get("VMODEL_API_KEY", "")
 
+def resize_image_if_needed(image, max_size=1024):
+    """이미지가 너무 크면 자동으로 리사이즈"""
+    width, height = image.size
+    
+    # 이미지가 max_size보다 크면 비율을 유지하며 리사이즈
+    if width > max_size or height > max_size:
+        # 긴 쪽을 기준으로 비율 계산
+        if width > height:
+            new_width = max_size
+            new_height = int(height * (max_size / width))
+        else:
+            new_height = max_size
+            new_width = int(width * (max_size / height))
+        
+        # 리샘플링으로 고품질 리사이즈
+        resized_image = image.resize((new_width, new_height), Image.Resampling.LANCZOS)
+        return resized_image, True  # 리사이즈됨을 표시
+    
+    return image, False  # 리사이즈 안됨
+
 def validate_image(image):
-    """이미지 유효성 검사"""
+    """이미지 유효성 검사 및 자동 리사이즈"""
     try:
         if image.size[0] < 100 or image.size[1] < 100:
-            return False, "이미지 크기가 너무 작습니다 (최소 100x100)"
+            return False, "이미지 크기가 너무 작습니다 (최소 100x100)", image
         
-        if image.size[0] > 4096 or image.size[1] > 4096:
-            return False, "이미지 크기가 너무 큽니다 (최대 4096x4096)"
+        # 자동 리사이즈
+        processed_image, was_resized = resize_image_if_needed(image, max_size=1024)
         
-        return True, "유효한 이미지입니다"
+        if was_resized:
+            original_size = f"{image.size[0]}x{image.size[1]}"
+            new_size = f"{processed_image.size[0]}x{processed_image.size[1]}"
+            message = f"이미지 크기를 자동 조정했습니다: {original_size} → {new_size}"
+        else:
+            message = "유효한 이미지입니다"
+        
+        return True, message, processed_image
+        
     except Exception as e:
-        return False, f"이미지 검증 실패: {e}"
+        return False, f"이미지 검증 실패: {e}", image
 
 def upload_image_to_imgur(image):
     """Imgur에 이미지 업로드하고 URL 반환"""
@@ -314,42 +342,48 @@ with tab2:
         seed_file = st.file_uploader(
             "시드 이미지 업로드 (본인 얼굴)", 
             type=['png', 'jpg', 'jpeg'],
-            help="정면을 바라보는 얼굴 사진"
+            help="어떤 크기든 OK! 자동으로 최적 크기로 조정됩니다"
         )
         
         if seed_file:
             seed_image = Image.open(seed_file)
-            st.image(seed_image, caption="미리보기", width=300)
             
-            # 이미지 정보
-            st.caption(f"파일명: {seed_file.name}")
-            st.caption(f"크기: {seed_image.size}")
+            # 자동 리사이즈 포함 검증
+            is_valid, message, processed_image = validate_image(seed_image)
             
-            # 유효성 검사
-            is_valid, message = validate_image(seed_image)
             if is_valid:
+                st.image(processed_image, caption="미리보기 (처리된 이미지)", width=300)
                 st.success(message)
+                
+                # 이미지 정보 표시
+                st.caption(f"원본 파일명: {seed_file.name}")
+                st.caption(f"처리된 크기: {processed_image.size}")
             else:
+                st.image(seed_image, caption="미리보기", width=300)
                 st.error(message)
+                processed_image = seed_image
     
     with col2:
         if seed_file and st.button("💾 시드 저장", type="primary"):
             seed_image = Image.open(seed_file)
-            is_valid, message = validate_image(seed_image)
+            is_valid, message, processed_image = validate_image(seed_image)
             
             if is_valid:
-                # 세션에 저장
+                # 처리된 이미지로 저장
                 seed_id = str(uuid.uuid4())[:8]
                 st.session_state.seed_images[seed_id] = {
-                    'image': seed_image,
+                    'image': processed_image,  # 처리된 이미지 저장
                     'filename': seed_file.name,
+                    'original_size': seed_image.size,
+                    'processed_size': processed_image.size,
                     'created_at': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
                 }
                 
                 st.markdown(f"""
                 <div class="success-box">
                     ✅ 시드 저장 완료!<br>
-                    ID: {seed_id}
+                    ID: {seed_id}<br>
+                    {message}
                 </div>
                 """, unsafe_allow_html=True)
                 time.sleep(1)
@@ -406,7 +440,7 @@ with tab1:
             ref_file = st.file_uploader(
                 "원하는 헤어스타일 이미지", 
                 type=['png', 'jpg', 'jpeg'],
-                help="원하는 헤어스타일이 담긴 사진"
+                help="원하는 헤어스타일이 담긴 사진 (최대 4096x4096)"
             )
             
             if ref_file:
@@ -423,19 +457,22 @@ with tab1:
                     
                     ref_image = Image.open(ref_file)
                     
-                    # 참조 이미지 유효성 검사
-                    is_valid, message = validate_image(ref_image)
+                    # 참조 이미지도 자동 리사이즈
+                    is_valid, message, processed_ref_image = validate_image(ref_image)
                     if not is_valid:
                         st.error(f"참조 이미지 오류: {message}")
                         st.stop()
                     
+                    if processed_ref_image.size != ref_image.size:
+                        st.info(f"참조 이미지 크기 조정: {ref_image.size} → {processed_ref_image.size}")
+                    
                     with st.spinner("AI가 헤어스타일을 변경하고 있습니다..."):
                         start_time = time.time()
                         
-                        # AI 처리
+                        # AI 처리 (자동 리사이즈된 이미지 사용)
                         result_image = process_with_vmodel_api(
-                            selected_seed_data['image'], 
-                            ref_image
+                            selected_seed_data['image'],  # 이미 처리된 시드 이미지
+                            processed_ref_image  # 처리된 참조 이미지
                         )
                         
                         processing_time = time.time() - start_time
