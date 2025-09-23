@@ -173,6 +173,80 @@ def upload_to_tempfile_io(image):
         st.error(f"모든 이미지 업로드 서비스가 실패했습니다: {e}")
         return None
 
+def poll_vmodel_task(task_id, max_attempts=60):
+    """VModel Task 상태 폴링 - 60초로 연장"""
+    headers = {"Authorization": f"Bearer {VMODEL_API_KEY}"}
+    
+    progress_bar = st.progress(0)
+    status_text = st.empty()
+    
+    for attempt in range(max_attempts):
+        try:
+            response = requests.get(
+                f"https://api.vmodel.ai/api/tasks/v1/get/{task_id}", 
+                headers=headers,
+                timeout=10
+            )
+            
+            if response.status_code == 200:
+                result = response.json()
+                
+                # 응답 구조 확인
+                if result.get('code') == 200 and 'result' in result:
+                    task_result = result['result']
+                    status = task_result.get('status', 'processing')
+                    
+                    # 진행률 업데이트 (60초 기준, 0.0-1.0 범위)
+                    progress = min(0.95, (attempt + 1) * 0.015)  # 0.015씩 증가
+                    progress_bar.progress(progress)
+                    
+                    if status == 'processing':
+                        status_text.text(f"AI 처리 중... ({progress*100:.0f}%) - {attempt+1}/60초")
+                    elif status == 'starting':
+                        status_text.text("AI 모델 시작 중...")
+                    elif status == 'succeeded':
+                        progress_bar.progress(1.0)
+                        status_text.text("완료!")
+                        
+                        # 결과 이미지 URL 가져오기
+                        output = task_result.get('output', [])
+                        if output and len(output) > 0:
+                            result_url = output[0]
+                            st.info(f"결과 이미지 다운로드 중: {result_url}")
+                            
+                            img_response = requests.get(result_url, timeout=30)
+                            if img_response.status_code == 200:
+                                return Image.open(io.BytesIO(img_response.content))
+                            else:
+                                st.error(f"이미지 다운로드 실패: HTTP {img_response.status_code}")
+                                return None
+                        
+                        st.error("결과 이미지 URL을 찾을 수 없습니다.")
+                        return None
+                        
+                    elif status == 'failed':
+                        error_msg = task_result.get('error', '알 수 없는 오류')
+                        st.error(f"처리 실패: {error_msg}")
+                        return None
+                    
+                    elif status == 'canceled':
+                        st.error("작업이 취소되었습니다.")
+                        return None
+                
+                time.sleep(1)  # 1초마다 체크
+            else:
+                st.error(f"Task 상태 확인 실패: HTTP {response.status_code}")
+                return None
+                
+        except Exception as e:
+            if attempt == max_attempts - 1:
+                st.error(f"처리 시간 초과 (60초): {e}")
+                return None
+            time.sleep(1)
+    
+    st.error("처리 시간 초과 - VModel 서버가 응답하지 않습니다")
+    return None
+
 def process_with_vmodel_api(seed_image, ref_image):
     """VModel API로 헤어 변경 처리"""
     
@@ -360,78 +434,6 @@ def poll_replicate_result(prediction_id, process_name, max_attempts=30):
                 return None
             time.sleep(2)
     
-    return None
-    """VModel Task 상태 폴링 - 60초로 연장"""
-    headers = {"Authorization": f"Bearer {VMODEL_API_KEY}"}
-    
-    progress_bar = st.progress(0)
-    status_text = st.empty()
-    
-    for attempt in range(max_attempts):
-        try:
-            response = requests.get(
-                f"https://api.vmodel.ai/api/tasks/v1/get/{task_id}", 
-                headers=headers,
-                timeout=10
-            )
-            
-            if response.status_code == 200:
-                result = response.json()
-                
-                # 응답 구조 확인
-                if result.get('code') == 200 and 'result' in result:
-                    task_result = result['result']
-                    status = task_result.get('status', 'processing')
-                    
-                    # 진행률 업데이트 (60초 기준, 0.0-1.0 범위)
-                    progress = min(0.95, (attempt + 1) * 0.015)  # 0.015씩 증가
-                    progress_bar.progress(progress)
-                    
-                    if status == 'processing':
-                        status_text.text(f"AI 처리 중... ({progress*100:.0f}%) - {attempt+1}/60초")
-                    elif status == 'starting':
-                        status_text.text("AI 모델 시작 중...")
-                    elif status == 'succeeded':
-                        progress_bar.progress(1.0)
-                        status_text.text("완료!")
-                        
-                        # 결과 이미지 URL 가져오기
-                        output = task_result.get('output', [])
-                        if output and len(output) > 0:
-                            result_url = output[0]
-                            st.info(f"결과 이미지 다운로드 중: {result_url}")
-                            
-                            img_response = requests.get(result_url, timeout=30)
-                            if img_response.status_code == 200:
-                                return Image.open(io.BytesIO(img_response.content))
-                            else:
-                                st.error(f"이미지 다운로드 실패: HTTP {img_response.status_code}")
-                                return None
-                        
-                        st.error("결과 이미지 URL을 찾을 수 없습니다.")
-                        return None
-                        
-                    elif status == 'failed':
-                        error_msg = task_result.get('error', '알 수 없는 오류')
-                        st.error(f"처리 실패: {error_msg}")
-                        return None
-                    
-                    elif status == 'canceled':
-                        st.error("작업이 취소되었습니다.")
-                        return None
-                
-                time.sleep(1)  # 1초마다 체크
-            else:
-                st.error(f"Task 상태 확인 실패: HTTP {response.status_code}")
-                return None
-                
-        except Exception as e:
-            if attempt == max_attempts - 1:
-                st.error(f"처리 시간 초과 (60초): {e}")
-                return None
-            time.sleep(1)
-    
-    st.error("처리 시간 초과 - VModel 서버가 응답하지 않습니다")
     return None
 
 # 메인 UI
