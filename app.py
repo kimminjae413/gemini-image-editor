@@ -71,8 +71,8 @@ def validate_image(image):
         if image.size[0] < 100 or image.size[1] < 100:
             return False, "이미지 크기가 너무 작습니다 (최소 100x100)"
         
-        if image.size[0] > 2048 or image.size[1] > 2048:
-            return False, "이미지 크기가 너무 큽니다 (최대 2048x2048)"
+        if image.size[0] > 4096 or image.size[1] > 4096:
+            return False, "이미지 크기가 너무 큽니다 (최대 4096x4096)"
         
         return True, "유효한 이미지입니다"
     except Exception as e:
