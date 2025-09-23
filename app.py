@@ -142,7 +142,7 @@ def process_with_vmodel_api(seed_image, ref_image):
         st.error(f"처리 중 오류 발생: {e}")
         return None
 
-def poll_vmodel_result(task_id, max_attempts=30):
+def poll_vmodel_task(task_id, max_attempts=30):
     """VModel 결과 폴링"""
     headers = {"Authorization": f"Bearer {VMODEL_API_KEY}"}
     
