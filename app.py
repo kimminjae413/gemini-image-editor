@@ -192,12 +192,14 @@ def process_with_vmodel_api(seed_image, ref_image):
         
         st.success("이미지 업로드 완료!")
         
-        # VModel API 페이로드 (문서 형식에 맞춤)
+        # VModel API 페이로드 (정확한 헤어스타일 모델 사용)
         payload = {
-            "version": "d4f292d1ea72ac4e501e6ac7be938ce2a5c50c6852387b1b64dedee01e623029",
+            "version": "5c0440717a995b0bbd93377bd65dbb4fe360f67967c506aa6bd8f6b660733a7e",
             "input": {
-                "target_image": target_url,
-                "swap_image": swap_url
+                "source": swap_url,      # 헤어스타일 참조 이미지
+                "target": target_url,    # 변경할 사람 이미지
+                "disable_safety_checker": False,
+                "mode": "fast"
             }
         }
         
