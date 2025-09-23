@@ -49,14 +49,6 @@ st.markdown("""
         border: 1px solid #bee5eb;
         margin: 1rem 0;
     }
-    .enhancement-box {
-        background: #fff3cd;
-        color: #856404;
-        padding: 1rem;
-        border-radius: 5px;
-        border: 1px solid #ffeaa7;
-        margin: 1rem 0;
-    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -72,7 +64,6 @@ if 'processing_history' not in st.session_state:
 
 # API 설정
 VMODEL_API_KEY = st.secrets.get("VMODEL_API_KEY", "")
-REPLICATE_API_TOKEN = st.secrets.get("REPLICATE_API_TOKEN", "")
 
 def resize_image_if_needed(image, max_size=1024):
     """이미지가 너무 크면 자동으로 리사이즈"""
@@ -321,163 +312,12 @@ def process_with_vmodel_api(seed_image, ref_image):
         st.error(f"처리 중 오류 발생: {e}")
         return None
 
-def upscale_with_real_esrgan(image):
-    """Real-ESRGAN API로 이미지 업스케일링"""
-    if not REPLICATE_API_TOKEN:
-        st.warning("Replicate API 토큰이 없어 업스케일링을 건너뜁니다.")
-        return image
-    
-    try:
-        # 이미지를 base64로 변환
-        buffer = io.BytesIO()
-        image.save(buffer, format='PNG')
-        img_b64 = base64.b64encode(buffer.getvalue()).decode()
-        
-        # Replicate API 호출 (Real-ESRGAN)
-        response = requests.post(
-            "https://api.replicate.com/v1/predictions",
-            headers={
-                "Authorization": f"Token {REPLICATE_API_TOKEN}",
-                "Content-Type": "application/json"
-            },
-            json={
-                "version": "nightmareai/real-esrgan:42fed1c4974146d4d2414e2be2c5277c7fcf05fcc3a73abf41610695738c1d7b",
-                "input": {
-                    "image": f"data:image/png;base64,{img_b64}",
-                    "scale": 4,
-                    "face_enhance": True
-                }
-            },
-            timeout=30
-        )
-        
-        if response.status_code == 201:
-            prediction_id = response.json()["id"]
-            return poll_replicate_result(prediction_id, "업스케일링")
-        else:
-            st.warning(f"업스케일링 API 호출 실패: {response.status_code}")
-            return image
-        
-    except Exception as e:
-        st.warning(f"업스케일링 실패: {e}")
-        return image
-
-def enhance_face_with_gfpgan(image):
-    """GFPGAN API로 얼굴 보정"""
-    if not REPLICATE_API_TOKEN:
-        st.warning("Replicate API 토큰이 없어 얼굴 보정을 건너뜁니다.")
-        return image
-    
-    try:
-        # 이미지를 base64로 변환
-        buffer = io.BytesIO()
-        image.save(buffer, format='PNG')
-        img_b64 = base64.b64encode(buffer.getvalue()).decode()
-        
-        # Replicate API 호출 (GFPGAN)
-        response = requests.post(
-            "https://api.replicate.com/v1/predictions",
-            headers={
-                "Authorization": f"Token {REPLICATE_API_TOKEN}",
-                "Content-Type": "application/json"
-            },
-            json={
-                "version": "tencentarc/gfpgan:9283608cc6b7be6b65a8e44983db012355fde4132009bf99d976b2f0896856a3",
-                "input": {
-                    "img": f"data:image/png;base64,{img_b64}",
-                    "version": "v1.4",
-                    "scale": 2
-                }
-            },
-            timeout=30
-        )
-        
-        if response.status_code == 201:
-            prediction_id = response.json()["id"]
-            return poll_replicate_result(prediction_id, "얼굴 보정")
-        else:
-            st.warning(f"얼굴 보정 API 호출 실패: {response.status_code}")
-            return image
-        
-    except Exception as e:
-        st.warning(f"얼굴 보정 실패: {e}")
-        return image
-
-def poll_replicate_result(prediction_id, process_name, max_attempts=30):
-    """Replicate 결과 폴링"""
-    headers = {"Authorization": f"Token {REPLICATE_API_TOKEN}"}
-    
-    progress_bar = st.progress(0)
-    status_text = st.empty()
-    
-    for attempt in range(max_attempts):
-        try:
-            response = requests.get(
-                f"https://api.replicate.com/v1/predictions/{prediction_id}",
-                headers=headers,
-                timeout=10
-            )
-            
-            if response.status_code == 200:
-                result = response.json()
-                status = result.get("status")
-                
-                # 진행률 표시
-                progress = min(0.95, (attempt + 1) / max_attempts)
-                progress_bar.progress(progress)
-                status_text.text(f"{process_name} 중... ({progress*100:.0f}%)")
-                
-                if status == "succeeded":
-                    progress_bar.progress(1.0)
-                    status_text.text(f"{process_name} 완료!")
-                    
-                    output_url = result.get("output")
-                    if output_url:
-                        img_response = requests.get(output_url, timeout=30)
-                        if img_response.status_code == 200:
-                            return Image.open(io.BytesIO(img_response.content))
-                
-                elif status == "failed":
-                    st.warning(f"{process_name} 실패")
-                    return None
-                
-                time.sleep(2)
-                
-        except Exception as e:
-            if attempt == max_attempts - 1:
-                st.warning(f"{process_name} 시간 초과")
-                return None
-            time.sleep(2)
-    
-    return None
-
-def enhance_image_quality(image):
-    """이미지 품질 향상 (업스케일링 + 얼굴 보정)"""
-    try:
-        # 1단계: Real-ESRGAN으로 업스케일링
-        st.info("1단계: 이미지 업스케일링 중...")
-        upscaled_image = upscale_with_real_esrgan(image)
-        
-        if upscaled_image == image:
-            st.warning("업스케일링을 건너뛰고 얼굴 보정만 진행합니다.")
-            upscaled_image = image
-        else:
-            st.success("업스케일링 완료!")
-        
-        # 2단계: GFPGAN으로 얼굴 보정
-        st.info("2단계: 얼굴 디테일 보정 중...")
-        enhanced_image = enhance_face_with_gfpgan(upscaled_image)
-        
-        if enhanced_image == upscaled_image:
-            st.warning("얼굴 보정을 건너뛰었습니다.")
-        else:
-            st.success("얼굴 보정 완료!")
-        
-        return enhanced_image
-        
-    except Exception as e:
-        st.warning(f"후보정 중 오류 발생: {e}. 원본 이미지를 반환합니다.")
-        return image
+def create_download_link(image, filename):
+    """이미지 다운로드 링크 생성"""
+    img_buffer = io.BytesIO()
+    image.save(img_buffer, format='PNG', quality=95, optimize=True)
+    img_buffer.seek(0)
+    return img_buffer.getvalue()
 
 # 메인 UI
 st.markdown("""
@@ -497,7 +337,6 @@ if not VMODEL_API_KEY:
     3. 다음 내용 추가:
     ```
     VMODEL_API_KEY = "your-api-key-here"
-    REPLICATE_API_TOKEN = "your-replicate-token"  # 후보정용 (선택사항)
     ```
     """)
     st.stop()
@@ -510,13 +349,7 @@ with st.sidebar:
     # API 상태 표시
     st.markdown("### 🔑 API 상태")
     vmodel_status = "✅ 연결됨" if VMODEL_API_KEY else "❌ 미설정"
-    replicate_status = "✅ 연결됨" if REPLICATE_API_TOKEN else "❌ 미설정"
-    
     st.write(f"VModel: {vmodel_status}")
-    st.write(f"Replicate: {replicate_status}")
-    
-    if not REPLICATE_API_TOKEN:
-        st.warning("Replicate 토큰이 없으면 후보정 기능을 사용할 수 없습니다.")
     
     if st.button("🔄 새 세션 시작"):
         st.session_state.clear()
@@ -529,18 +362,17 @@ with st.sidebar:
     1. **시드 이미지 업로드** (본인 얼굴)
     2. **참조 이미지 업로드** (원하는 헤어스타일)
     3. **AI 변환 실행**
-    4. **고화질 후보정** (선택사항)
-    5. **결과 확인 및 다운로드**
+    4. **결과 확인 및 다운로드**
     
     ### 💡 팁
     - 정면을 바라보는 고화질 사진 사용
     - 머리카락이 명확히 보이는 이미지
     - 배경이 단순한 사진 권장
     
-    ### 🎨 후보정 기능
-    - **업스케일링**: 4배 해상도 향상
-    - **얼굴 보정**: 자연스러운 피부 질감
-    - **디테일 강화**: 눈, 코, 입 선명화
+    ### ⚡ 처리 속도
+    - 평균 처리 시간: 8-15초
+    - 결과 해상도: 원본과 동일
+    - 품질 최적화된 PNG 다운로드
     """)
 
 # 메인 탭
@@ -653,33 +485,12 @@ with tab1:
             ref_file = st.file_uploader(
                 "원하는 헤어스타일 이미지", 
                 type=['png', 'jpg', 'jpeg'],
-                help="원하는 헤어스타일이 담긴 사진 (최대 4096x4096)"
+                help="원하는 헤어스타일이 담긴 사진"
             )
             
             if ref_file:
                 ref_image = Image.open(ref_file)
                 st.image(ref_image, caption="참조 이미지", width=250)
-        
-        # 후보정 옵션
-        st.divider()
-        st.subheader("3️⃣ 후보정 옵션")
-        
-        enhance_quality = st.checkbox(
-            "🎨 고화질 후보정 적용 (업스케일링 + 얼굴 보정)", 
-            value=bool(REPLICATE_API_TOKEN),
-            disabled=not bool(REPLICATE_API_TOKEN),
-            help="Replicate API 토큰이 필요합니다. 추가 20-30초 소요되지만 훨씬 고화질 결과를 얻을 수 있습니다."
-        )
-        
-        if enhance_quality and not REPLICATE_API_TOKEN:
-            st.markdown("""
-            <div class="enhancement-box">
-                ⚠️ <strong>후보정을 위해 Replicate API 토큰이 필요합니다</strong><br>
-                1. <a href="https://replicate.com" target="_blank">replicate.com</a>에서 계정 생성<br>
-                2. API 토큰 발급<br>
-                3. Streamlit Secrets에 REPLICATE_API_TOKEN 추가
-            </div>
-            """, unsafe_allow_html=True)
         
         # 처리 실행
         if ref_file:
@@ -714,34 +525,14 @@ with tab1:
                         if result_image:
                             st.success(f"✨ 헤어 변경 완료! (소요시간: {processing_time:.1f}초)")
                             
-                            # 후보정 처리
-                            final_image = result_image
-                            enhancement_time = 0
-                            
-                            if enhance_quality and REPLICATE_API_TOKEN:
-                                st.divider()
-                                st.markdown("### 🎨 고화질 후보정 진행 중...")
-                                
-                                enhancement_start = time.time()
-                                with st.spinner("후보정 중... (20-30초 소요)"):
-                                    final_image = enhance_image_quality(result_image)
-                                enhancement_time = time.time() - enhancement_start
-                                
-                                if final_image != result_image:
-                                    st.success(f"🌟 후보정 완료! (추가 시간: {enhancement_time:.1f}초)")
-                                else:
-                                    st.info("후보정이 적용되지 않았습니다.")
-                            
                             # 처리 기록 저장
-                            total_time = processing_time + enhancement_time
                             history_item = {
                                 'id': str(uuid.uuid4())[:8],
                                 'seed_filename': selected_seed_data['filename'],
                                 'ref_filename': ref_file.name,
-                                'result_image': final_image,
-                                'enhanced': enhance_quality and REPLICATE_API_TOKEN,
+                                'result_image': result_image,
                                 'created_at': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
-                                'processing_time': total_time
+                                'processing_time': processing_time
                             }
                             st.session_state.processing_history.append(history_item)
                             
@@ -754,30 +545,35 @@ with tab1:
                             with col1:
                                 st.image(selected_seed_data['image'], caption="원본", width=300)
                             with col2:
-                                st.image(final_image, caption="변경 결과", width=300)
+                                st.image(result_image, caption="변경 결과", width=300)
                             
-                            # 다운로드
-                            img_buffer = io.BytesIO()
-                            final_image.save(img_buffer, format='PNG')
-                            
-                            enhancement_suffix = "_enhanced" if (enhance_quality and REPLICATE_API_TOKEN) else ""
-                            filename = f"hair_result{enhancement_suffix}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png"
-                            
-                            st.download_button(
-                                "💾 결과 다운로드",
-                                img_buffer.getvalue(),
-                                filename,
-                                "image/png",
-                                use_container_width=True
-                            )
+                            # 고품질 다운로드 버튼
+                            st.divider()
+                            col1, col2, col3 = st.columns([1, 2, 1])
+                            with col2:
+                                # 파일명 생성
+                                timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+                                filename = f"hair_result_{timestamp}.png"
+                                
+                                # 고품질 PNG 다운로드
+                                download_data = create_download_link(result_image, filename)
+                                
+                                st.download_button(
+                                    label="💾 고품질 PNG 다운로드",
+                                    data=download_data,
+                                    file_name=filename,
+                                    mime="image/png",
+                                    use_container_width=True,
+                                    help="최고 품질의 PNG 파일로 다운로드됩니다"
+                                )
                             
                             # 결과 정보
                             st.info(f"""
                             **처리 정보**
-                            - 헤어 변경: {processing_time:.1f}초
-                            - 후보정: {enhancement_time:.1f}초 ({('적용됨' if enhance_quality and REPLICATE_API_TOKEN else '미적용')})
-                            - 총 시간: {total_time:.1f}초
-                            - 최종 해상도: {final_image.size}
+                            - 처리 시간: {processing_time:.1f}초
+                            - 최종 해상도: {result_image.size}
+                            - 파일 형식: 고품질 PNG
+                            - 압축: 최적화됨
                             """)
                             
                         else:
@@ -799,8 +595,7 @@ with tab3:
         )
         
         for item in history:
-            enhancement_badge = " 🌟" if item.get('enhanced', False) else ""
-            with st.expander(f"🕐 {item['created_at']} - {item['seed_filename']} → {item['ref_filename']}{enhancement_badge}"):
+            with st.expander(f"🕐 {item['created_at']} - {item['seed_filename']} → {item['ref_filename']}"):
                 col1, col2 = st.columns([1, 1])
                 
                 with col1:
@@ -808,26 +603,22 @@ with tab3:
                     st.write(f"**시드 파일**: {item['seed_filename']}")
                     st.write(f"**참조 파일**: {item['ref_filename']}")
                     st.write(f"**처리 시간**: {item['processing_time']:.1f}초")
-                    if item.get('enhanced', False):
-                        st.write("**후보정**: ✅ 적용됨")
-                    else:
-                        st.write("**후보정**: ❌ 미적용")
                 
                 with col2:
                     st.image(item['result_image'], caption="처리 결과", width=300)
                     
-                    # 다운로드
-                    img_buffer = io.BytesIO()
-                    item['result_image'].save(img_buffer, format='PNG')
-                    enhancement_suffix = "_enhanced" if item.get('enhanced', False) else ""
-                    filename = f"result_{item['id']}{enhancement_suffix}.png"
+                    # 고품질 다운로드
+                    timestamp = item['created_at'].replace('-', '').replace(':', '').replace(' ', '_')
+                    filename = f"result_{item['id']}_{timestamp}.png"
+                    download_data = create_download_link(item['result_image'], filename)
                     
                     st.download_button(
-                        "다운로드",
-                        img_buffer.getvalue(),
+                        "💾 고품질 다운로드",
+                        download_data,
                         filename,
                         "image/png",
-                        key=f"download_{item['id']}"
+                        key=f"download_{item['id']}",
+                        help="최고 품질 PNG 다운로드"
                     )
 
 # 푸터
