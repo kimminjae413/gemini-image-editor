@@ -256,9 +256,6 @@ def poll_vmodel_task(task_id, max_attempts=60):
             if response.status_code == 200:
                 result = response.json()
                 
-                # 디버깅: 응답 구조 확인
-                st.write(f"DEBUG - API 응답: {result}")
-                
                 # 응답 구조 확인
                 if result.get('code') == 200 and 'result' in result:
                     task_result = result['result']
@@ -280,11 +277,16 @@ def poll_vmodel_task(task_id, max_attempts=60):
                         output = task_result.get('output', [])
                         if output and len(output) > 0:
                             result_url = output[0]
-                            img_response = requests.get(result_url, headers=headers, timeout=30)
+                            st.info(f"결과 이미지 다운로드 중: {result_url}")
+                            
+                            img_response = requests.get(result_url, timeout=30)
                             if img_response.status_code == 200:
                                 return Image.open(io.BytesIO(img_response.content))
+                            else:
+                                st.error(f"이미지 다운로드 실패: HTTP {img_response.status_code}")
+                                return None
                         
-                        st.error("결과 이미지를 찾을 수 없습니다.")
+                        st.error("결과 이미지 URL을 찾을 수 없습니다.")
                         return None
                         
                     elif status == 'failed':
