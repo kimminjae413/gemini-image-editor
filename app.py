@@ -238,7 +238,129 @@ def process_with_vmodel_api(seed_image, ref_image):
         st.error(f"처리 중 오류 발생: {e}")
         return None
 
-def poll_vmodel_task(task_id, max_attempts=60):
+def enhance_image_quality(image):
+    """이미지 품질 향상 (업스케일링 + 얼굴 보정)"""
+    try:
+        # 1단계: Real-ESRGAN으로 업스케일링
+        upscaled_image = upscale_with_real_esrgan(image)
+        
+        # 2단계: GFPGAN으로 얼굴 보정
+        enhanced_image = enhance_face_with_gfpgan(upscaled_image)
+        
+        return enhanced_image
+        
+    except Exception as e:
+        st.warning(f"후보정 중 오류 발생: {e}. 원본 이미지를 반환합니다.")
+        return image
+
+def upscale_with_real_esrgan(image):
+    """Real-ESRGAN API로 이미지 업스케일링"""
+    try:
+        # 이미지를 base64로 변환
+        buffer = io.BytesIO()
+        image.save(buffer, format='PNG')
+        img_b64 = base64.b64encode(buffer.getvalue()).decode()
+        
+        # Replicate API 호출 (Real-ESRGAN)
+        response = requests.post(
+            "https://api.replicate.com/v1/predictions",
+            headers={
+                "Authorization": f"Token {st.secrets.get('REPLICATE_API_TOKEN', '')}",
+                "Content-Type": "application/json"
+            },
+            json={
+                "version": "nightmareai/real-esrgan:42fed1c4974146d4d2414e2be2c5277c7fcf05fcc3a73abf41610695738c1d7b",
+                "input": {
+                    "image": f"data:image/png;base64,{img_b64}",
+                    "scale": 4,
+                    "face_enhance": True
+                }
+            },
+            timeout=30
+        )
+        
+        if response.status_code == 201:
+            prediction_id = response.json()["id"]
+            return poll_replicate_result(prediction_id, "업스케일링")
+        
+        return image
+        
+    except Exception as e:
+        st.warning(f"업스케일링 실패: {e}")
+        return image
+
+def enhance_face_with_gfpgan(image):
+    """GFPGAN API로 얼굴 보정"""
+    try:
+        # 이미지를 base64로 변환
+        buffer = io.BytesIO()
+        image.save(buffer, format='PNG')
+        img_b64 = base64.b64encode(buffer.getvalue()).decode()
+        
+        # Replicate API 호출 (GFPGAN)
+        response = requests.post(
+            "https://api.replicate.com/v1/predictions",
+            headers={
+                "Authorization": f"Token {st.secrets.get('REPLICATE_API_TOKEN', '')}",
+                "Content-Type": "application/json"
+            },
+            json={
+                "version": "tencentarc/gfpgan:9283608cc6b7be6b65a8e44983db012355fde4132009bf99d976b2f0896856a3",
+                "input": {
+                    "img": f"data:image/png;base64,{img_b64}",
+                    "version": "v1.4",
+                    "scale": 2
+                }
+            },
+            timeout=30
+        )
+        
+        if response.status_code == 201:
+            prediction_id = response.json()["id"]
+            return poll_replicate_result(prediction_id, "얼굴 보정")
+        
+        return image
+        
+    except Exception as e:
+        st.warning(f"얼굴 보정 실패: {e}")
+        return image
+
+def poll_replicate_result(prediction_id, process_name, max_attempts=30):
+    """Replicate 결과 폴링"""
+    headers = {"Authorization": f"Token {st.secrets.get('REPLICATE_API_TOKEN', '')}"}
+    
+    for attempt in range(max_attempts):
+        try:
+            response = requests.get(
+                f"https://api.replicate.com/v1/predictions/{prediction_id}",
+                headers=headers,
+                timeout=10
+            )
+            
+            if response.status_code == 200:
+                result = response.json()
+                status = result.get("status")
+                
+                if status == "succeeded":
+                    output_url = result.get("output")
+                    if output_url:
+                        img_response = requests.get(output_url, timeout=30)
+                        if img_response.status_code == 200:
+                            return Image.open(io.BytesIO(img_response.content))
+                
+                elif status == "failed":
+                    st.warning(f"{process_name} 실패")
+                    return None
+                
+                time.sleep(2)
+                
+        except Exception as e:
+            if attempt == max_attempts - 1:
+                st.warning(f"{process_name} 시간 초과")
+                return None
+            time.sleep(2)
+    
+    return None
     """VModel Task 상태 폴링 - 60초로 연장"""
     headers = {"Authorization": f"Bearer {VMODEL_API_KEY}"}
     
