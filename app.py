@@ -261,16 +261,16 @@ def poll_vmodel_task(task_id, max_attempts=60):
                     task_result = result['result']
                     status = task_result.get('status', 'processing')
                     
-                    # 진행률 업데이트 (60초 기준)
-                    progress = min(95, (attempt + 1) * 1.5)
+                    # 진행률 업데이트 (60초 기준, 0.0-1.0 범위)
+                    progress = min(0.95, (attempt + 1) * 0.015)  # 0.015씩 증가
                     progress_bar.progress(progress)
                     
                     if status == 'processing':
-                        status_text.text(f"AI 처리 중... ({progress:.0f}%) - {attempt+1}/60회 시도")
+                        status_text.text(f"AI 처리 중... ({progress*100:.0f}%) - {attempt+1}/60초")
                     elif status == 'starting':
                         status_text.text("AI 모델 시작 중...")
                     elif status == 'succeeded':
-                        progress_bar.progress(100)
+                        progress_bar.progress(1.0)
                         status_text.text("완료!")
                         
                         # 결과 이미지 URL 가져오기
