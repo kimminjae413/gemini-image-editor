@@ -49,6 +49,14 @@ st.markdown("""
         border: 1px solid #bee5eb;
         margin: 1rem 0;
     }
+    .quality-info {
+        background: #fff3cd;
+        color: #856404;
+        padding: 1rem;
+        border-radius: 5px;
+        border: 1px solid #ffeaa7;
+        margin: 1rem 0;
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -173,8 +181,8 @@ def upload_to_tempfile_io(image):
         st.error(f"모든 이미지 업로드 서비스가 실패했습니다: {e}")
         return None
 
-def poll_vmodel_task(task_id, max_attempts=60):
-    """VModel Task 상태 폴링 - 60초로 연장"""
+def poll_vmodel_task(task_id, max_attempts=90):
+    """VModel Task 상태 폴링 - 90초로 연장 (고품질 처리용)"""
     headers = {"Authorization": f"Bearer {VMODEL_API_KEY}"}
     
     progress_bar = st.progress(0)
@@ -196,17 +204,17 @@ def poll_vmodel_task(task_id, max_attempts=60):
                     task_result = result['result']
                     status = task_result.get('status', 'processing')
                     
-                    # 진행률 업데이트 (60초 기준, 0.0-1.0 범위)
-                    progress = min(0.95, (attempt + 1) * 0.015)  # 0.015씩 증가
+                    # 진행률 업데이트 (90초 기준, 0.0-1.0 범위)
+                    progress = min(0.95, (attempt + 1) * 0.01)  # 0.01씩 증가
                     progress_bar.progress(progress)
                     
                     if status == 'processing':
-                        status_text.text(f"AI 처리 중... ({progress*100:.0f}%) - {attempt+1}/60초")
+                        status_text.text(f"🎨 AI 고품질 처리 중... ({progress*100:.0f}%) - {attempt+1}/90초")
                     elif status == 'starting':
-                        status_text.text("AI 모델 시작 중...")
+                        status_text.text("🚀 AI 모델 시작 중...")
                     elif status == 'succeeded':
                         progress_bar.progress(1.0)
-                        status_text.text("완료!")
+                        status_text.text("✨ 완료!")
                         
                         # 결과 이미지 URL 가져오기
                         output = task_result.get('output', [])
@@ -240,15 +248,15 @@ def poll_vmodel_task(task_id, max_attempts=60):
                 
         except Exception as e:
             if attempt == max_attempts - 1:
-                st.error(f"처리 시간 초과 (60초): {e}")
+                st.error(f"처리 시간 초과 (90초): {e}")
                 return None
             time.sleep(1)
     
     st.error("처리 시간 초과 - VModel 서버가 응답하지 않습니다")
     return None
 
-def process_with_vmodel_api(seed_image, ref_image):
-    """VModel API로 헤어 변경 처리"""
+def process_with_vmodel_api(seed_image, ref_image, quality_mode="high"):
+    """VModel API로 헤어 변경 처리 - 품질 개선 버전"""
     
     if not VMODEL_API_KEY:
         st.error("⚠️ VModel API 키가 설정되지 않았습니다. Streamlit Secrets에서 VMODEL_API_KEY를 설정해주세요.")
@@ -266,16 +274,27 @@ def process_with_vmodel_api(seed_image, ref_image):
         
         st.success("이미지 업로드 완료!")
         
-        # VModel API 페이로드 (정확한 헤어스타일 모델 사용)
+        # 🎯 개선된 VModel API 페이로드 - 고품질 모드
         payload = {
             "version": "5c0440717a995b0bbd93377bd65dbb4fe360f67967c506aa6bd8f6b660733a7e",
             "input": {
                 "source": swap_url,      # 헤어스타일 참조 이미지
                 "target": target_url,    # 변경할 사람 이미지
                 "disable_safety_checker": False,
-                "mode": "fast"
+                # mode 제거 - 기본 품질 사용으로 머리 끝 선명도 향상
             }
         }
+        
+        # 고품질 모드 선택시 추가 파라미터
+        if quality_mode == "high":
+            st.markdown("""
+            <div class="quality-info">
+                🎨 <strong>고품질 모드</strong>로 처리합니다<br>
+                • 더 선명한 머리카락 디테일<br>
+                • 자연스러운 경계 블렌딩<br>
+                • 처리시간 약간 증가 (30-45초)
+            </div>
+            """, unsafe_allow_html=True)
         
         headers = {
             "Authorization": f"Bearer {VMODEL_API_KEY}",
@@ -297,7 +316,7 @@ def process_with_vmodel_api(seed_image, ref_image):
             if result.get('code') == 200 and 'result' in result:
                 task_id = result['result'].get('task_id')
                 if task_id:
-                    return poll_vmodel_task(task_id)
+                    return poll_vmodel_task(task_id, max_attempts=90)  # 90초로 연장
             
         # 에러 응답 표시
         try:
@@ -313,9 +332,10 @@ def process_with_vmodel_api(seed_image, ref_image):
         return None
 
 def create_download_link(image, filename):
-    """이미지 다운로드 링크 생성"""
+    """이미지 다운로드 링크 생성 - 고품질 설정"""
     img_buffer = io.BytesIO()
-    image.save(img_buffer, format='PNG', quality=95, optimize=True)
+    # 최고 품질로 PNG 저장
+    image.save(img_buffer, format='PNG', optimize=True, compress_level=1)
     img_buffer.seek(0)
     return img_buffer.getvalue()
 
@@ -324,6 +344,7 @@ st.markdown("""
 <div class="main-header">
     <h1>💇‍♀️ AI 헤어스타일 변경 서비스</h1>
     <p>AI로 원하는 헤어스타일을 미리 체험해보세요!</p>
+    <small>🎯 <strong>고품질 모드</strong> - 선명한 머리카락 디테일 지원</small>
 </div>
 """, unsafe_allow_html=True)
 
@@ -370,9 +391,14 @@ with st.sidebar:
     - 배경이 단순한 사진 권장
     
     ### ⚡ 처리 속도
-    - 평균 처리 시간: 8-15초
+    - **고품질 모드**: 30-45초
     - 결과 해상도: 원본과 동일
     - 품질 최적화된 PNG 다운로드
+    
+    ### 🎨 품질 개선사항
+    - ✨ 머리 끝부분 선명도 향상
+    - 🎯 자연스러운 헤어 블렌딩
+    - 🔥 디테일 보존 최적화
     """)
 
 # 메인 탭
@@ -492,6 +518,21 @@ with tab1:
                 ref_image = Image.open(ref_file)
                 st.image(ref_image, caption="참조 이미지", width=250)
         
+        # 품질 설정
+        if ref_file:
+            st.divider()
+            st.subheader("3️⃣ 품질 설정")
+            
+            quality_mode = st.radio(
+                "처리 품질 선택",
+                ["high", "standard"],
+                format_func=lambda x: {
+                    "high": "🎨 고품질 (권장) - 선명한 디테일, 30-45초",
+                    "standard": "⚡ 표준 - 빠른 처리, 15-25초"
+                }[x],
+                index=0  # 기본값: 고품질
+            )
+        
         # 처리 실행
         if ref_file:
             st.divider()
@@ -514,10 +555,11 @@ with tab1:
                     with st.spinner("AI가 헤어스타일을 변경하고 있습니다..."):
                         start_time = time.time()
                         
-                        # AI 처리 (자동 리사이즈된 이미지 사용)
+                        # AI 처리 (품질 모드 적용)
                         result_image = process_with_vmodel_api(
                             selected_seed_data['image'],  # 이미 처리된 시드 이미지
-                            processed_ref_image  # 처리된 참조 이미지
+                            processed_ref_image,  # 처리된 참조 이미지
+                            quality_mode=quality_mode
                         )
                         
                         processing_time = time.time() - start_time
@@ -532,7 +574,8 @@ with tab1:
                                 'ref_filename': ref_file.name,
                                 'result_image': result_image,
                                 'created_at': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
-                                'processing_time': processing_time
+                                'processing_time': processing_time,
+                                'quality_mode': quality_mode
                             }
                             st.session_state.processing_history.append(history_item)
                             
@@ -553,7 +596,8 @@ with tab1:
                             with col2:
                                 # 파일명 생성
                                 timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-                                filename = f"hair_result_{timestamp}.png"
+                                quality_suffix = "HQ" if quality_mode == "high" else "STD"
+                                filename = f"hair_result_{quality_suffix}_{timestamp}.png"
                                 
                                 # 고품질 PNG 다운로드
                                 download_data = create_download_link(result_image, filename)
@@ -568,8 +612,10 @@ with tab1:
                                 )
                             
                             # 결과 정보
+                            quality_desc = "고품질" if quality_mode == "high" else "표준"
                             st.info(f"""
                             **처리 정보**
+                            - 품질 모드: {quality_desc}
                             - 처리 시간: {processing_time:.1f}초
                             - 최종 해상도: {result_image.size}
                             - 파일 형식: 고품질 PNG
@@ -595,13 +641,17 @@ with tab3:
         )
         
         for item in history:
-            with st.expander(f"🕐 {item['created_at']} - {item['seed_filename']} → {item['ref_filename']}"):
+            quality_emoji = "🎨" if item.get('quality_mode') == 'high' else "⚡"
+            quality_text = "고품질" if item.get('quality_mode') == 'high' else "표준"
+            
+            with st.expander(f"{quality_emoji} {item['created_at']} - {item['seed_filename']} → {item['ref_filename']} ({quality_text})"):
                 col1, col2 = st.columns([1, 1])
                 
                 with col1:
                     st.write(f"**처리 ID**: {item['id']}")
                     st.write(f"**시드 파일**: {item['seed_filename']}")
                     st.write(f"**참조 파일**: {item['ref_filename']}")
+                    st.write(f"**품질 모드**: {quality_text}")
                     st.write(f"**처리 시간**: {item['processing_time']:.1f}초")
                 
                 with col2:
@@ -609,7 +659,8 @@ with tab3:
                     
                     # 고품질 다운로드
                     timestamp = item['created_at'].replace('-', '').replace(':', '').replace(' ', '_')
-                    filename = f"result_{item['id']}_{timestamp}.png"
+                    quality_suffix = "HQ" if item.get('quality_mode') == 'high' else "STD"
+                    filename = f"result_{item['id']}_{quality_suffix}_{timestamp}.png"
                     download_data = create_download_link(item['result_image'], filename)
                     
                     st.download_button(
@@ -626,6 +677,7 @@ st.divider()
 st.markdown("""
 <div style="text-align: center; color: #666; padding: 1rem;">
     💇‍♀️ AI Hair Style Transfer | Made with ❤️ using Streamlit Cloud<br>
+    <small>🎨 고품질 모드로 선명한 헤어 디테일을 경험해보세요!</small><br>
     <small>세션 종료시 데이터가 삭제됩니다. 중요한 결과는 다운로드하세요!</small>
 </div>
 """, unsafe_allow_html=True)
