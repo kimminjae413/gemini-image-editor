@@ -110,7 +110,7 @@ def calculate_realtime_metrics():
 # API 엔드포인트 (테스터 검증용)
 def handle_verification_api():
     """테스터 검증용 API 엔드포인트 처리"""
-    query_params = st.experimental_get_query_params()
+    query_params = st.query_params
     
     if "api" in query_params:
         api_type = query_params["api"][0]
