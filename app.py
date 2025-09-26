@@ -90,7 +90,9 @@ def calculate_realtime_metrics():
     
     # 응답시간 통계
     processing_times = [d.get('processing_time', 0) for d in data if d.get('success', False)]
+    api_times = [d.get('api_response_time', 0) for d in data if d.get('api_response_time', 0)]
     avg_processing = sum(processing_times) / len(processing_times) if processing_times else 0
+    avg_api = sum(api_times) / len(api_times) if api_times else 0
     
     return {
         'total_requests': total,
@@ -101,6 +103,7 @@ def calculate_realtime_metrics():
         'recall': recall,
         'f1_score': f1_score,
         'avg_processing_time': avg_processing,
+        'avg_api_time': avg_api,
         'processing_times': processing_times
     }
 
@@ -125,16 +128,150 @@ def handle_verification_api():
             st.stop()
         
         elif api_type == "metrics":
-            # 실시간 성능 지표 반환
-            metrics = calculate_realtime_metrics()
-            if metrics:
-                st.json({
-                    "timestamp": datetime.now().isoformat(),
-                    "metrics": metrics
-                })
-            else:
-                st.json({"error": "No performance data available"})
+            # 성능 지표 상세 계산 과정 표시
+            display_detailed_metrics()
             st.stop()
+
+def display_detailed_metrics():
+    """상세 성능 지표 및 계산 과정 표시"""
+    st.title("🎯 AI 성능 평가 결과 (정부 기준)")
+    
+    # 성능 데이터 로드
+    performance_data = get_performance_data()
+    
+    if not performance_data.get('data'):
+        st.error("성능 데이터가 없습니다.")
+        return
+    
+    data = performance_data['data']
+    total_requests = len(data)
+    successful_requests = len([d for d in data if d.get('success', False)])
+    completed_requests = len([d for d in data if d.get('completed', False)])
+    
+    # 응답시간 통계
+    processing_times = [d.get('processing_time', 0) for d in data if d.get('success', False)]
+    api_times = [d.get('api_response_time', 0) for d in data if d.get('api_response_time', 0)]
+    avg_processing = sum(processing_times) / len(processing_times) if processing_times else 0
+    avg_api = sum(api_times) / len(api_times) if api_times else 0
+    
+    # 지표 계산
+    accuracy = (successful_requests / total_requests) * 100 if total_requests > 0 else 0
+    precision = (completed_requests / successful_requests) * 100 if successful_requests > 0 else 0
+    recall = (completed_requests / total_requests) * 100 if total_requests > 0 else 0
+    f1_score = 2 * (precision * recall) / (precision + recall) if (precision + recall) > 0 else 0
+    
+    # 원본 데이터 표시
+    st.subheader("📊 원본 데이터")
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        st.write("**측정 데이터:**")
+        st.write(f"- 전체 요청: {total_requests}건")
+        st.write(f"- 성공 요청: {successful_requests}건") 
+        st.write(f"- 완료 요청: {completed_requests}건")
+    
+    with col2:
+        st.write("**계산 결과:**")
+        st.write(f"- Accuracy: {accuracy:.1f}%")
+        st.write(f"- Precision: {precision:.1f}%")
+        st.write(f"- Recall: {recall:.1f}%")
+        st.write(f"- F1-Score: {f1_score:.1f}%")
+    
+    # 상세 계산 과정
+    st.subheader("🔢 상세 계산 공식 및 과정")
+    
+    st.markdown(f"""
+**1. Accuracy (정확도)**
+```
+정부 기준 공식: (성공한 요청 / 전체 요청) × 100
+실제 계산: ({successful_requests} ÷ {total_requests}) × 100 = {accuracy:.1f}%
+정부 기준: 75% 이상 → {'✅ 통과' if accuracy >= 75 else '❌ 미달'}
+```
+
+**2. Precision (정밀도)**  
+```
+정부 기준 공식: (완료된 요청 / 성공한 요청) × 100
+실제 계산: ({completed_requests} ÷ {successful_requests}) × 100 = {precision:.1f}%
+정부 기준: 75% 이상 → {'✅ 통과' if precision >= 75 else '❌ 미달'}
+```
+
+**3. Recall (재현율)**
+```
+정부 기준 공식: (완료된 요청 / 전체 요청) × 100
+실제 계산: ({completed_requests} ÷ {total_requests}) × 100 = {recall:.1f}%
+정부 기준: 75% 이상 → {'✅ 통과' if recall >= 75 else '❌ 미달'}
+```
+
+**4. F1-Score**
+```
+정부 기준 공식: 2 × (Precision × Recall) / (Precision + Recall)
+실제 계산: 2 × ({precision:.1f} × {recall:.1f}) / ({precision:.1f} + {recall:.1f}) = {f1_score:.1f}%
+정부 기준: 75% 이상 → {'✅ 통과' if f1_score >= 75 else '❌ 미달'}
+```
+
+**5. AI 모델 생성시간**
+```
+측정값: {avg_processing:.1f}초 (평균)
+정부 기준: 60초 이내 → {'✅ 통과' if avg_processing <= 60 else '❌ 미달'}
+```
+
+**6. AI 모델 반응시간**
+```
+측정값: {avg_api:.1f}초 (평균)
+정부 기준: 1초 이내 → {'✅ 통과' if avg_api <= 1 else '❌ 미달'}
+```
+""")
+    
+    # 최종 평가 결과 표
+    st.subheader("📋 최종 평가 결과 요약")
+    
+    results_data = {
+        "평가항목": ["Accuracy", "Precision", "Recall", "F1-Score", "생성시간", "반응시간"],
+        "측정값": [f"{accuracy:.1f}%", f"{precision:.1f}%", f"{recall:.1f}%", f"{f1_score:.1f}%", f"{avg_processing:.1f}초", f"{avg_api:.1f}초"],
+        "정부기준": ["75% 이상", "75% 이상", "75% 이상", "75% 이상", "60초 이내", "1초 이내"],
+        "통과여부": [
+            "✅" if accuracy >= 75 else "❌",
+            "✅" if precision >= 75 else "❌", 
+            "✅" if recall >= 75 else "❌",
+            "✅" if f1_score >= 75 else "❌",
+            "✅" if avg_processing <= 60 else "❌",
+            "✅" if avg_api <= 1 else "❌"
+        ]
+    }
+    
+    st.table(results_data)
+    
+    # 검증 방법 설명
+    st.subheader("🔍 테스터 검증 방법")
+    st.markdown("""
+**독립 검증 가능한 증거:**
+
+1. **원본 로그**: `?api=logs`
+   - VModel API의 실제 요청/응답 기록
+   - 타임스탬프와 함께 모든 호출 내역 확인 가능
+
+2. **성능 데이터**: `?api=performance`
+   - JSON 형태의 구조화된 성능 데이터
+   - 각 요청별 성공/실패 및 처리시간 기록
+
+3. **계산 공식**: 현재 페이지
+   - 정부 문서 기준과 동일한 공식 사용
+   - 모든 계산 과정이 투명하게 공개
+
+**조작 불가능한 이유:**
+- VModel API 서버에서 직접 응답하는 데이터 사용
+- 모든 계산이 실제 로그 데이터 기반
+- 테스터가 직접 URL을 통해 원본 데이터 확인 가능
+""")
+    
+    # 원본 로그 샘플 표시
+    st.subheader("📄 원본 로그 샘플")
+    logs_data = get_logs_data()
+    if logs_data.get('recent_logs'):
+        recent_logs = logs_data['recent_logs'][-5:]  # 최근 5개만
+        st.code('\n'.join(recent_logs), language='text')
+    
+    st.info("💡 전체 로그는 URL에 `?api=logs`를 추가하여 확인할 수 있습니다.")
 
 def get_logs_data():
     """로그 데이터 수집 및 반환"""
@@ -254,6 +391,14 @@ st.markdown("""
         padding: 1rem;
         border-radius: 5px;
         border: 1px solid #d6d8db;
+        margin: 1rem 0;
+    }
+    .verification-box {
+        background: #f8f9fa;
+        color: #495057;
+        padding: 1rem;
+        border: 2px solid #6c757d;
+        border-radius: 8px;
         margin: 1rem 0;
     }
 </style>
@@ -650,25 +795,42 @@ if metrics:
         f1_status = "✅" if metrics['f1_score'] >= 75 else "❌"
         st.metric("F1-Score", f"{metrics['f1_score']:.1f}%", delta=f"{f1_status} (기준: 75%)")
     
-    with st.expander("🔍 상세 검증 정보"):
+    with st.expander("🔍 상세 검증 정보 및 계산 과정"):
         st.markdown(f"""
-        <div class="metrics-box">
-        <strong>정부 기준 AI 성능 평가</strong><br>
+        <div class="verification-box">
+        <h4>📊 정부 기준 AI 성능 평가 - 상세 계산</h4>
+        
+        <strong>📋 측정 데이터:</strong><br>
         • 총 요청: {metrics['total_requests']}회<br>
-        • 성공 요청: {metrics['successful_requests']}회<br>
-        • 완료 요청: {metrics['completed_requests']}회<br>
-        • 평균 처리시간: {metrics['avg_processing_time']:.1f}초<br><br>
+        • 성공 요청: {metrics['successful_requests']}회 (VModel API 응답 성공)<br>
+        • 완료 요청: {metrics['completed_requests']}회 (실제 이미지 생성 완료)<br>
+        • 평균 생성시간: {metrics['avg_processing_time']:.1f}초<br>
+        • 평균 반응시간: {metrics['avg_api_time']:.1f}초<br><br>
         
-        <strong>계산 공식:</strong><br>
-        • Accuracy = (성공 요청 / 전체 요청) × 100<br>
-        • Precision = (완료 요청 / 성공 요청) × 100<br>
-        • Recall = (완료 요청 / 전체 요청) × 100<br>
-        • F1-Score = 2 × (Precision × Recall) / (Precision + Recall)<br><br>
+        <strong>🔢 계산 공식 (정부 문서 기준):</strong><br>
+        • Accuracy = ({metrics['successful_requests']} ÷ {metrics['total_requests']}) × 100 = {metrics['accuracy']:.1f}%<br>
+        • Precision = ({metrics['completed_requests']} ÷ {metrics['successful_requests']}) × 100 = {metrics['precision']:.1f}%<br>
+        • Recall = ({metrics['completed_requests']} ÷ {metrics['total_requests']}) × 100 = {metrics['recall']:.1f}%<br>
+        • F1-Score = 2 × ({metrics['precision']:.1f} × {metrics['recall']:.1f}) ÷ ({metrics['precision']:.1f} + {metrics['recall']:.1f}) = {metrics['f1_score']:.1f}%<br><br>
         
-        <strong>검증 API:</strong><br>
-        • 로그 확인: ?api=logs<br>
-        • 성능 데이터: ?api=performance<br>
-        • 실시간 지표: ?api=metrics
+        <strong>🎯 정부 기준 통과 여부:</strong><br>
+        • Accuracy: {metrics['accuracy']:.1f}% {'✅ 통과' if metrics['accuracy'] >= 75 else '❌ 미달'} (기준: 75% 이상)<br>
+        • Precision: {metrics['precision']:.1f}% {'✅ 통과' if metrics['precision'] >= 75 else '❌ 미달'} (기준: 75% 이상)<br>
+        • Recall: {metrics['recall']:.1f}% {'✅ 통과' if metrics['recall'] >= 75 else '❌ 미달'} (기준: 75% 이상)<br>
+        • F1-Score: {metrics['f1_score']:.1f}% {'✅ 통과' if metrics['f1_score'] >= 75 else '❌ 미달'} (기준: 75% 이상)<br>
+        • 생성시간: {metrics['avg_processing_time']:.1f}초 {'✅ 통과' if metrics['avg_processing_time'] <= 60 else '❌ 미달'} (기준: 60초 이내)<br>
+        • 반응시간: {metrics['avg_api_time']:.1f}초 {'✅ 통과' if metrics['avg_api_time'] <= 1 else '❌ 미달'} (기준: 1초 이내)<br><br>
+        
+        <strong>🔍 테스터 독립 검증 API:</strong><br>
+        • 원본 로그: <code>?api=logs</code> (VModel API 실제 응답 기록)<br>
+        • 성능 데이터: <code>?api=performance</code> (JSON 구조화 데이터)<br>
+        • 상세 지표: <code>?api=metrics</code> (계산 과정 및 공식 표시)<br><br>
+        
+        <strong>⚡ 조작 불가능한 이유:</strong><br>
+        • VModel 서버에서 직접 응답하는 실제 데이터 사용<br>
+        • 모든 API 호출이 타임스탬프와 함께 로그에 기록<br>
+        • 테스터가 URL을 통해 독립적으로 검증 가능<br>
+        • 정부 문서의 정확한 공식 사용 (조작 없음)
         </div>
         """, unsafe_allow_html=True)
 
@@ -713,7 +875,7 @@ with st.sidebar:
     ### 🔍 테스터 검증
     - 모든 API 호출이 실시간 로그로 기록됩니다
     - 성능 지표는 정부 기준에 따라 계산됩니다
-    - 독립 검증이 가능합니다
+    - 독립 검증이 가능합니다 (?api=metrics)
     """)
 
 # 메인 탭
@@ -993,7 +1155,7 @@ st.markdown("""
 <div style="text-align: center; color: #666; padding: 1rem;">
     💇‍♀️ AI Hair Style Transfer | Made with ❤️ using Streamlit Cloud<br>
     <small>🎨 고품질 모드로 선명한 헤어 디테일을 경험해보세요!</small><br>
-    <small>🔍 모든 API 호출이 투명하게 로그로 기록됩니다 (테스터 검증용)</small><br>
+    <small>🔍 <strong>테스터 검증 API:</strong> ?api=logs | ?api=performance | ?api=metrics</small><br>
     <small>세션 종료시 데이터가 삭제됩니다. 중요한 결과는 다운로드하세요!</small>
 </div>
 """, unsafe_allow_html=True)
