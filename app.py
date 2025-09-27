@@ -49,13 +49,28 @@ def log_vmodel_api_call(request_data, response_data, success=True, processing_ti
     
     append_to_log("logs/success_failures.log", success_log)
     
+    # 완료 상태 정확한 판정 로직
+    completed = False
+    if success:
+        # VModel 응답에서 실제 결과 확인 (여러 패턴 지원)
+        if response_data.get('result_url'):  # 직접 result_url이 있는 경우
+            completed = True
+        elif response_data.get('output') and len(response_data.get('output', [])) > 0:  # output 배열이 있는 경우
+            completed = True
+        elif response_data.get('status') == 'poll_completed':  # 폴링 완료 상태
+            completed = True
+        elif 'response' in response_data:  # 중첩 응답 구조인 경우
+            inner_response = response_data['response']
+            if inner_response.get('result', {}).get('output'):
+                completed = True
+    
     # 성능 데이터 저장 (정부 기준 적용)
     performance_record = {
         "timestamp": timestamp,
         "request_id": f"req_{int(time.time())}_{uuid.uuid4().hex[:8]}",
         "user_id": st.session_state.get('user_id', 'unknown'),
         "success": success,  # VModel API 응답 성공 여부
-        "completed": success and bool(response_data.get('result_url')),  # 실제 이미지 생성 여부
+        "completed": completed,  # 실제 이미지 생성 여부 (수정된 로직)
         "processing_time": processing_time,
         "api_response_time": response_data.get('api_response_time', 0),
         "task_id": response_data.get('task_id'),
