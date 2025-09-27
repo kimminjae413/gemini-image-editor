@@ -107,13 +107,13 @@ def calculate_realtime_metrics():
         'processing_times': processing_times
     }
 
-# API 엔드포인트 (테스터 검증용)
+# API 엔드포인트 (테스터 검증용) - 수정된 부분
 def handle_verification_api():
     """테스터 검증용 API 엔드포인트 처리"""
     query_params = st.query_params
     
     if "api" in query_params:
-        api_type = query_params["api"][0]
+        api_type = query_params["api"]  # [0] 제거 - 수정된 부분
         
         if api_type == "logs":
             # 로그 데이터 반환
@@ -141,6 +141,8 @@ def display_detailed_metrics():
     
     if not performance_data.get('data'):
         st.error("성능 데이터가 없습니다.")
+        st.write("디버그 정보:")
+        st.json(performance_data)
         return
     
     data = performance_data['data']
@@ -274,7 +276,7 @@ def display_detailed_metrics():
     st.info("💡 전체 로그는 URL에 `?api=logs`를 추가하여 확인할 수 있습니다.")
 
 def get_logs_data():
-    """로그 데이터 수집 및 반환"""
+    """로그 데이터 수집 및 반환 - 개선된 버전"""
     try:
         logs_data = {
             "timestamp": datetime.now().isoformat(),
@@ -303,31 +305,42 @@ def get_logs_data():
                                 
                 except Exception as e:
                     logs_data["log_files"][f"{log_file}_error"] = f"Read failed: {str(e)}"
+            else:
+                logs_data["log_files"][f"{log_file}_missing"] = "File does not exist"
         
         return logs_data
     except Exception as e:
         return {"error": f"Failed to collect logs: {str(e)}"}
 
 def get_performance_data():
-    """성능 데이터 수집 및 반환"""
+    """성능 데이터 수집 및 반환 - 개선된 버전"""
     try:
         performance_data = []
+        
+        # 디렉토리 생성 확인
+        if not os.path.exists("performance_data"):
+            os.makedirs("performance_data")
         
         # JSONL 파일에서 성능 데이터 읽기
         performance_file = "performance_data/performance_log.jsonl"
         if os.path.exists(performance_file):
             with open(performance_file, 'r', encoding='utf-8') as f:
-                for line in f:
-                    if line.strip():
-                        try:
-                            performance_data.append(json.loads(line))
-                        except json.JSONDecodeError:
-                            continue
+                content = f.read()
+                if content.strip():  # 빈 파일이 아닌 경우에만
+                    for line in content.strip().split('\n'):
+                        if line.strip():
+                            try:
+                                performance_data.append(json.loads(line))
+                            except json.JSONDecodeError as e:
+                                print(f"JSON decode error: {e} in line: {line}")
+                                continue
         
         return {
             "timestamp": datetime.now().isoformat(),
             "data": performance_data,
-            "total_records": len(performance_data)
+            "total_records": len(performance_data),
+            "file_exists": os.path.exists(performance_file),
+            "file_path": os.path.abspath(performance_file)
         }
     except Exception as e:
         return {"error": f"Failed to collect performance data: {str(e)}"}
